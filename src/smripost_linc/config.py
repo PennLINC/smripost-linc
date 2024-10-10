@@ -389,8 +389,8 @@ class execution(_Config):
 
     bids_dir = None
     """An existing path to the dataset, which must be BIDS-compliant."""
-    derivatives = {}
-    """Path(s) to search for pre-computed derivatives"""
+    datasets = {}
+    """Path(s) to search for pre-computed derivatives or BIDS-Atlas datasets"""
     bids_database_dir = None
     """Path to the directory containing SQLite database indices for the input BIDS dataset."""
     bids_description_hash = None
@@ -434,8 +434,6 @@ class execution(_Config):
     """Unique identifier of this particular run."""
     participant_label = None
     """List of participant identifiers that are to be preprocessed."""
-    task_id = None
-    """Select a particular task from all available in the dataset."""
     templateflow_home = _templateflow_home
     """The root folder of the TemplateFlow client."""
     work_dir = Path('work').absolute()
@@ -447,7 +445,7 @@ class execution(_Config):
 
     _paths = (
         'bids_dir',
-        'derivatives',
+        'datasets',
         'bids_database_dir',
         'fs_license_file',
         'layout',
@@ -540,23 +538,13 @@ class workflow(_Config):
     """Configure the particular execution graph of this workflow."""
 
     err_on_warn = False
-    """Cast AROMA warnings to errors."""
-    melodic_dim = None
-    """Number of ICA components to be estimated by MELODIC
-    (positive = exact, negative = maximum)."""
-    denoise_method = None
-    """Denoising strategy to be used."""
+    """Cast sMRIPost-LINC warnings to errors."""
     ignore = None
     """Ignore particular steps for *sMRIPost-LINC*."""
     cifti_output = None
     """Generate HCP Grayordinates, accepts either ``'91k'`` (default) or ``'170k'``."""
     dummy_scans = None
     """Set a number of initial scans to be considered nonsteady states."""
-    slice_time_ref = 0.5
-    """The time of the reference slice to correct BOLD values to, as a fraction
-    acquisition time. 0 indicates the start, 0.5 the midpoint, and 1 the end
-    of acquisition. The alias `start` corresponds to 0, and `middle` to 0.5.
-    The default value is 0.5."""
 
 
 class loggers:

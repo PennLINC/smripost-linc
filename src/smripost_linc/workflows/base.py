@@ -113,8 +113,8 @@ def init_single_subject_wf(subject_id: str):
     Notes
     -----
     1.  Load sMRIPost-LINC config file.
-    2.  Collect fMRIPrep derivatives.
-        -   BOLD file in native space.
+    2.  Collect sMRIPrep and Freesurfer derivatives.
+        -   Preprocessed anatomical files
         -   Two main possibilities:
             1.  bids_dir is a raw BIDS dataset and preprocessing derivatives
                 are provided through ``--derivatives``.

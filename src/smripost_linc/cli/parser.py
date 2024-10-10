@@ -236,12 +236,12 @@ def _build_parser(**kwargs):
     )
     g_bids.add_argument(
         '-d',
-        '--derivatives',
+        '--datasets',
         action=ToDict,
         metavar='PACKAGE=PATH',
         nargs='+',
         help=(
-            'Search PATH(s) for pre-computed derivatives. '
+            'Search PATH(s) for pre-computed derivatives or BIDS-atlas datasets. '
             'These may be provided as named folders '
             '(e.g., `--derivatives smriprep=/path/to/smriprep`).'
         ),

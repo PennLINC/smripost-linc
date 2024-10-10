@@ -325,16 +325,16 @@ def write_derivative_description(input_dir, output_dir, dataset_links=None):
     )
 
     # Keys that can only be set by environment
-    if 'FMRIPOST_AROMA_DOCKER_TAG' in os.environ:
+    if 'SMRIPOST_LINC_DOCKER_TAG' in os.environ:
         desc['GeneratedBy'][0]['Container'] = {
             'Type': 'docker',
-            'Tag': f'pennlinc/smripost_linc:{os.environ["FMRIPOST_AROMA__DOCKER_TAG"]}',
+            'Tag': f'pennlinc/smripost_linc:{os.environ["SMRIPOST_LINC_DOCKER_TAG"]}',
         }
 
-    if 'FMRIPOST_AROMA__SINGULARITY_URL' in os.environ:
+    if 'SMRIPOST_LINC__SINGULARITY_URL' in os.environ:
         desc['GeneratedBy'][0]['Container'] = {
             'Type': 'singularity',
-            'URI': os.getenv('FMRIPOST_AROMA__SINGULARITY_URL'),
+            'URI': os.getenv('SMRIPOST_LINC__SINGULARITY_URL'),
         }
 
     # Replace local templateflow path with URL
