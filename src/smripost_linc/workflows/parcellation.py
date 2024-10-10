@@ -2,6 +2,7 @@
 # vi: set ft=python sts=4 ts=4 sw=4 et:
 """Workflows for parcellating imaging data."""
 
+from neuromaps.transforms import fslr_to_fsaverage
 from nipype.interfaces import utility as niu
 from nipype.pipeline import engine as pe
 from niworkflows.engine.workflows import LiterateWorkflow as Workflow
@@ -10,17 +11,87 @@ from smripost_linc import config
 from smripost_linc.interfaces.bids import BIDSURI
 
 
+def ctab_from_neuroparc_json(neuroparc_json_file=None, atlas_nifti_file=None):
+    import json
+
+    if neuroparc_json_file is not None:
+        with open(neuroparc_json_file) as jsonf:
+            initial_specs = json.load(jsonf)
+            if 'MetaData' in initial_specs:
+                del initial_specs['MetaData']
+    else:
+        initial_specs = fake_neuroparc_from_nifti(atlas_nifti_file)
+
+    parc_specs = fill_missing_parc(initial_specs)
+    # Get a mapping from ints to label names from neuroparc
+    int_to_label_map = {}
+    for key, value in parc_specs.items():
+        if not key.isnumeric():
+            continue
+        key = int(key)
+        label = value.get('label') or f'region{key:05d}'
+        int_to_label_map[key] = label
+
+    int_to_label_map[0] = 'Unknown'
+    labels = [
+        remove_non_alphabetic(int_to_label_map[key]) for key in sorted(int_to_label_map.keys())
+    ]
+    colors = _create_colors(len(labels))
+    return colors, labels
+
+
+def create_annots(nifti_file, atlas, json_file=None):
+    """Create .annot files from a nifti file and a json file."""
+    import nibabel as nb
+    import numpy as np
+    from neuromaps import transforms
+
+    lh_gii, rh_gii = transforms.mni152_to_fsaverage(
+        nifti_file,
+        fsavg_density='164k',
+        method='nearest',
+    )
+    colors, names = ctab_from_neuroparc_json(
+        neuroparc_json_file=json_file,
+        atlas_nifti_file=nifti_file,
+    )
+    lh_annot = f'annots/lh.{atlas}.annot'
+    nb.freesurfer.write_annot(
+        lh_annot,
+        labels=lh_gii.agg_data().astype(np.int32),
+        ctab=colors,
+        names=names,
+        fill_ctab=True,
+    )
+    rh_annot = f'annots/rh.{atlas}.annot'
+    nb.freesurfer.write_annot(
+       rh_annot,
+        labels=rh_gii.agg_data().astype(np.int32),
+        ctab=colors,
+        names=names,
+        fill_ctab=True,
+    )
+    return lh_annot, rh_annot
+
+
 def init_load_atlases_wf(name='load_atlases_wf'):
-    """Load atlases and convert them to annot files.
+    """Load atlases, warp them to fsnative, and convert them to annot files.
+
+    1.  Identify the atlases to be used in the workflow.
+    2.  Classify atlases as fsLR, fsaverage, or fsnative-annot.
+    3.  Warp the fsLR atlases to fsaverage.
+    4.  Convert fsaverage atlases to annot files. (nibabel)
+    5.  Warp fsaverage-annot files to fsnative-annot files. (mri_surf2surf)
+    6.  Write out fsnative-annot files to derivatives.
 
     Workflow Graph
         .. workflow::
             :graph2use: orig
             :simple_form: yes
 
-            from xcp_d.tests.tests import mock_config
-            from xcp_d import config
-            from xcp_d.workflows.connectivity import init_load_atlases_wf
+            from smripost_linc.tests.tests import mock_config
+            from smripost_linc import config
+            from smripost_linc.workflows.parcellation import init_load_atlases_wf
 
             with mock_config():
                 wf = init_load_atlases_wf()
@@ -32,17 +103,16 @@ def init_load_atlases_wf(name='load_atlases_wf'):
 
     Inputs
     ------
-    %(name_source)s
-    bold_file
+    name_source
 
     Outputs
     -------
     atlas_files
     atlas_labels_files
     """
-    from xcp_d.interfaces.bids import CopyAtlas
-    from xcp_d.utils.atlas import collect_atlases
-    from xcp_d.utils.boilerplate import describe_atlases
+    from smripost_linc.interfaces.bids import DerivativesDataSink
+    from smripost_linc.utils.atlas import collect_atlases
+    from smripost_linc.utils.boilerplate import describe_atlases
 
     workflow = Workflow(name=name)
     output_dir = config.execution.output_dir
@@ -50,7 +120,6 @@ def init_load_atlases_wf(name='load_atlases_wf'):
     atlases = collect_atlases(
         datasets=config.execution.datasets,
         atlases=config.execution.atlases,
-        file_format=config.workflow.file_format,
         bids_filters=config.execution.bids_filters,
     )
 
@@ -105,6 +174,23 @@ The following atlases were used in the workflow: {atlas_str}.
     )
     workflow.connect([(inputnode, outputnode, [('atlas_names', 'atlas_names')])])
 
+    for atlas in atlases:
+        for hemi in ['L', 'R']:
+            # Identify space and file-type of the atlas
+            if atlases[atlas]['space'] == 'fsLR':
+                # Warp atlas from fsLR to fsaverage
+                warp_fslr_to_fsaverage = pe.Node(
+                    niu.Function(
+                        function=fslr_to_fsaverage,
+                    ),
+                    name=f'warp_fslr_to_fsaverage_{atlas}',
+                )
+                warp_fslr_to_fsaverage.inputs.target_density = '164k'
+                warp_fslr_to_fsaverage.inputs.hemi = hemi
+                warp_fslr_to_fsaverage.inputs.method = 'nearest'
+
+                # Convert fsaverage to annot
+
     atlas_srcs = pe.MapNode(
         BIDSURI(
             numinputs=1,
@@ -118,7 +204,7 @@ The following atlases were used in the workflow: {atlas_str}.
     workflow.connect([(inputnode, atlas_srcs, [('atlas_files', 'in1')])])
 
     copy_atlas = pe.MapNode(
-        CopyAtlas(output_dir=output_dir),
+        DerivativesDataSink(),
         name='copy_atlas',
         iterfield=['in_file', 'atlas', 'meta_dict', 'Sources'],
         run_without_submitting=True,
@@ -135,7 +221,7 @@ The following atlases were used in the workflow: {atlas_str}.
     ])  # fmt:skip
 
     copy_atlas_labels_file = pe.MapNode(
-        CopyAtlas(output_dir=output_dir),
+        DerivativesDataSink(),
         name='copy_atlas_labels_file',
         iterfield=['in_file', 'atlas'],
         run_without_submitting=True,
@@ -152,12 +238,12 @@ The following atlases were used in the workflow: {atlas_str}.
     return workflow
 
 
-def init_parcellate_cifti_wf(
+def init_parcellate_fsaverage_wf(
     mem_gb,
     compute_mask=True,
-    name='parcellate_cifti_wf',
+    name='parcellate_fsaverage_wf',
 ):
-    """Parcellate a CIFTI file using a set of atlases.
+    """Parcellate stuff.
 
     Part of the parcellation includes applying vertex-wise and node-wise masks.
 
@@ -315,7 +401,7 @@ def init_parcellate_cifti_wf(
         CiftiParcellateWorkbench(
             direction='COLUMN',
             only_numeric=True,
-            out_file=f'parcellated_data.{"ptseries" if compute_mask else "pscalar"}.nii',
+            out_file=f'parcellated_data.{'ptseries' if compute_mask else 'pscalar'}.nii',
             num_threads=config.nipype.omp_nthreads,
         ),
         name='parcellate_data',

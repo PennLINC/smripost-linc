@@ -387,6 +387,8 @@ class nipype(_Config):
 class execution(_Config):
     """Configure run-level settings."""
 
+    atlases = None
+    """Atlases to use."""
     bids_dir = None
     """An existing path to the dataset, which must be BIDS-compliant."""
     datasets = {}

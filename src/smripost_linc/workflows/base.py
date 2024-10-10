@@ -114,24 +114,9 @@ def init_single_subject_wf(subject_id: str):
     -----
     1.  Load sMRIPost-LINC config file.
     2.  Collect sMRIPrep and Freesurfer derivatives.
-        -   Preprocessed anatomical files
-        -   Two main possibilities:
-            1.  bids_dir is a raw BIDS dataset and preprocessing derivatives
-                are provided through ``--derivatives``.
-                In this scenario, we only need minimal derivatives.
-            2.  bids_dir is a derivatives dataset and we need to collect compliant
-                derivatives to get the data into the right space.
-    3.  Loop over runs.
-    4.  Collect each run's associated files.
-        -   Transform(s) to MNI152NLin6Asym
-        -   Confounds file
-        -   ICA-AROMA uses its own standard-space edge, CSF, and brain masks,
-            so we don't need to worry about those.
-    5.  Use ``resampler`` to warp BOLD to MNI152NLin6Asym-2mm.
-    6.  Convert motion parameters from confounds file to FSL format.
-    7.  Run ICA-AROMA.
-    8.  Warp BOLD to requested output spaces and denoise with ICA-AROMA.
-
+    3.  Warp/convert atlases to fsnative-space annot files.
+    4.  Use mri_anatomical_stats to extract brain tissue volumes for each of the atlases.
+    5.  Extract Euler number from recon-all.log.
     """
     from bids.utils import listify
     from niworkflows.engine.workflows import LiterateWorkflow as Workflow
