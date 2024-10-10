@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "smripost-linc"
-description = 'Run ICA-AROMA on fMRIPrep derivatives'
+description = 'Aggregate and parcellate sMRIPrep+Freesurfer derivatives'
 readme = "README.md"
 requires-python = ">=3.8"
 license = {file = "LICENSE"}
@@ -18,13 +18,11 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
-  "fmriprep @ git+https://github.com/pennlinc/fmriprep.git@master",
   "nipype >= 1.8.5",
   "nireports @ git+https://github.com/pennlinc/nireports.git@main",
   "nitransforms == 23.0.1",
   "niworkflows @ git+https://github.com/pennlinc/niworkflows.git@master",
   "pybids >= 0.15.6",
-  "sdcflows @ git+https://github.com/pennlinc/sdcflows.git@master",
   "smriprep @ git+https://github.com/pennlinc/smriprep.git@master",
   "typer",
 ]

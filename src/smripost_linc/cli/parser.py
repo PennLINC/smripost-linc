@@ -257,6 +257,27 @@ def _build_parser(**kwargs):
         ),
     )
 
+    # FreeSurfer options
+    g_fs = parser.add_argument_group('Specific options for FreeSurfer preprocessing')
+    g_fs.add_argument(
+        '--fs-license-file',
+        metavar='PATH',
+        type=IsFile,
+        help=(
+            'Path to FreeSurfer license key file. Get it (for free) by registering '
+            'at https://surfer.nmr.mgh.harvard.edu/registration.html'
+        ),
+    )
+    g_fs.add_argument(
+        '--fs-subjects-dir',
+        metavar='PATH',
+        type=PathExists,
+        help=(
+            'Path to existing FreeSurfer subjects directory to reuse. '
+            '(default: OUTPUT_DIR/freesurfer)'
+        ),
+    )
+
     g_perfm = parser.add_argument_group('Options to handle performance')
     g_perfm.add_argument(
         '--nprocs',

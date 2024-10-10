@@ -405,6 +405,8 @@ class execution(_Config):
     """Debug mode(s)."""
     fs_license_file = _fs_license
     """An existing file containing a FreeSurfer license."""
+    fs_subjects_dir = None
+    """An existing directory containing FreeSurfer subjects."""
     layout = None
     """A :py:class:`~bids.layout.BIDSLayout` object, see :py:func:`init`."""
     log_dir = None
@@ -448,6 +450,7 @@ class execution(_Config):
         'datasets',
         'bids_database_dir',
         'fs_license_file',
+        'fs_subjects_dir',
         'layout',
         'log_dir',
         'output_dir',
@@ -480,7 +483,7 @@ class execution(_Config):
                     'models',
                     re.compile(r'^\.'),
                     re.compile(
-                        r'sub-[a-zA-Z0-9]+(/ses-[a-zA-Z0-9]+)?/(beh|dwi|eeg|ieeg|meg|perf)'
+                        r'sub-[a-zA-Z0-9]+(/ses-[a-zA-Z0-9]+)?/(beh|dwi|func|eeg|ieeg|meg|perf)'
                     ),
                 ),
             )
