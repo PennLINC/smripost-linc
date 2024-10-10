@@ -5,7 +5,7 @@ sections:
   reportlets:
   - bids: {datatype: figures, desc: summary, suffix: bold}
 
-- name: Functional
+- name: Anatomical
   ordering: session,task,acquisition,ceagent,reconstruction,direction,run,echo
   reportlets:
   - bids: {datatype: figures, desc: summary, suffix: bold}

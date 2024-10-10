@@ -21,8 +21,8 @@
 #     https://www.pennlinc.org/community/licensing/
 #
 """
-fMRIPost AROMA workflows
-^^^^^^^^^^^^^^^^^^^^^^^^
+sMRIPost-LINC workflows
+^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autofunction:: init_smripost_linc_wf
 .. autofunction:: init_single_subject_wf

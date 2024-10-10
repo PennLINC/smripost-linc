@@ -80,6 +80,13 @@ def _build_parser(**kwargs):
             raise parser.error("Argument can't be less than one.")
         return value
 
+    def _restricted_float(value, parser):
+        """Ensure an argument is a float in the range [0, 1]."""
+        value = float(value)
+        if not 0 <= value <= 1:
+            raise parser.error('Argument must be a float between 0 and 1.')
+        return value
+
     def _to_gb(value):
         scale = {'G': 1, 'T': 10**3, 'M': 1e-3, 'K': 1e-6, 'B': 1e-9}
         digits = ''.join([c for c in value if c.isdigit()])
@@ -133,7 +140,7 @@ def _build_parser(**kwargs):
         action='store',
         type=PathExists,
         help=(
-            'The root folder of a BIDS-valid raw dataset '
+            'The root folder of a BIDS-valid raw or sMRIPrep derivatives dataset '
             '(sub-XXXXX folders should be found at the top level in this folder).'
         ),
     )
@@ -141,7 +148,7 @@ def _build_parser(**kwargs):
         'output_dir',
         action='store',
         type=Path,
-        help='The output path for the outcomes of preprocessing and visual reports',
+        help='The output path for the outcomes of postprocessing and visual reports',
     )
     parser.add_argument(
         'analysis_level',
@@ -152,36 +159,40 @@ def _build_parser(**kwargs):
         ),
     )
 
-    g_aroma = parser.add_argument_group('Options for running ICA-AROMA')
-    g_aroma.add_argument(
-        '--melodic-dimensionality',
-        dest='melodic_dim',
-        action='store',
-        default=0,
-        type=int,
-        help=(
-            'Exact or maximum number of MELODIC components to estimate '
-            '(positive = exact, negative = maximum)'
-        ),
-    )
-    g_aroma.add_argument(
-        '--error-on-warnings',
-        dest='err_on_warn',
+    g_anat = parser.add_argument_group('Options for anatomical postprocessing')
+    g_anat.add_argument(
+        '--anat-only',
         action='store_true',
         default=False,
-        help=(
-            'Raise an error if ICA-AROMA does not produce sensible output '
-            '(e.g., if all the components are classified as signal or noise)'
-        ),
+        help='Run anatomical processing only',
     )
-    g_aroma.add_argument(
-        '--denoising-method',
+
+    g_parcellation = parser.add_argument_group('Options for parcellation')
+    g_parcellation.add_argument(
+        '--atlases',
         action='store',
         nargs='+',
-        choices=['aggr', 'nonaggr', 'orthaggr'],
-        default=None,
-        dest='denoise_method',
-        help='Denoising method to apply, if any.',
+        metavar='ATLAS',
+        default=['test'],
+        dest='atlases',
+        help=(
+            'Selection of atlases to apply to the data. '
+            "All of XCP-D's built-in atlases are used by default."
+        ),
+    )
+    g_parcellation.add_argument(
+        '--min-coverage',
+        '--min_coverage',
+        dest='min_coverage',
+        required=False,
+        default=0.5,
+        type=_restricted_float,
+        help=(
+            'Coverage threshold to apply to parcels in each atlas. '
+            'Any parcels with lower coverage than the threshold will be replaced with NaNs. '
+            'Must be a value between zero and one, indicating proportion of the parcel. '
+            'Default is 0.5.'
+        ),
     )
 
     g_bids = parser.add_argument_group('Options for filtering BIDS queries')
@@ -310,52 +321,6 @@ def _build_parser(**kwargs):
             'This will only rerun report aggregation, not reportlet generation for specific '
             'nodes.'
         ),
-    )
-
-    g_conf = parser.add_argument_group('Workflow configuration')
-    g_conf.add_argument(
-        '--ignore',
-        required=False,
-        action='store',
-        nargs='+',
-        default=['fieldmaps'],
-        choices=['fieldmaps', 'slicetiming', 'fmap-jacobian'],
-        help=(
-            'Ignore selected aspects of the input dataset to disable corresponding '
-            'parts of the resampling workflow (a space delimited list)'
-        ),
-    )
-    # Disable output spaces until warping works
-    # g_conf.add_argument(
-    #     '--output-spaces',
-    #     nargs='*',
-    #     action=OutputReferencesAction,
-    #     help="""\
-    # Standard and non-standard spaces to resample denoised functional images to. \
-    # Standard spaces may be specified by the form \
-    # ``<SPACE>[:cohort-<label>][:res-<resolution>][...]``, where ``<SPACE>`` is \
-    # a keyword designating a spatial reference, and may be followed by optional, \
-    # colon-separated parameters. \
-    # Non-standard spaces imply specific orientations and sampling grids. \
-    # For further details, please check out \
-    # https://fmriprep.readthedocs.io/en/%s/spaces.html"""
-    #    % (currentv.base_version if is_release else 'latest'),
-    # )
-    g_conf.add_argument(
-        '--dummy-scans',
-        required=False,
-        action='store',
-        default=None,
-        type=int,
-        help='Number of nonsteady-state volumes. Overrides automatic detection.',
-    )
-    g_conf.add_argument(
-        '--random-seed',
-        dest='_random_seed',
-        action='store',
-        type=int,
-        default=None,
-        help='Initialize the random seed for the workflow',
     )
 
     g_outputs = parser.add_argument_group('Options for modulating outputs')

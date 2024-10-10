@@ -1,7 +1,7 @@
 # emacs: -*- mode: python; py-indent-offset: 4; indent-tabs-mode: nil -*-
 # vi: set ft=python sts=4 ts=4 sw=4 et:
 #
-# Copyright 2023 The NiPreps Developers <pennlinc@gmail.com>
+# Copyright 2023 The NiPreps Developers <nipreps@gmail.com>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@
 # We support and encourage derived works from this project, please read
 # about our expectations at
 #
-#     https://www.pennlinc.org/community/licensing/
+#     https://www.nipreps.org/community/licensing/
 #
 """
 The workflow builder factory method.
