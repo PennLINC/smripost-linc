@@ -11,7 +11,50 @@ from smripost_linc import config
 from smripost_linc.interfaces.bids import BIDSURI
 
 
+def remove_non_alphabetic(input_string):
+    """Use regular expression to remove non-alphabetic characters."""
+    import re
+
+    clean_string = re.sub(r'[^a-zA-Z_0-9]', '', input_string.replace(' ', '_'))
+    return clean_string
+
+
+def _create_colors(n_colors):
+    import numpy as np
+
+    color_set = {(0, 0, 0, 0)}
+    while len(color_set) < n_colors:
+        new_color = tuple((np.random.rand(3) * 155).astype(np.int32)) + (0,)
+        color_set.add(new_color)
+    color_mat = np.array(sorted(color_set))
+    if color_mat.shape[0] != n_colors:
+        raise ValueError(f'Could not generate {n_colors} unique colors.')
+
+    return color_mat
+
+
+def fake_neuroparc_from_nifti(nifti_file):
+    """Create a fake neuroparc JSON from a nifti file."""
+    import nibabel as nb
+    import numpy as np
+
+    img = nb.load(nifti_file)
+    unique_labels = np.unique(img.get_fdata().astype(np.int32))
+    return {str(label): {} for label in unique_labels}
+
+
+def fill_missing_parc(spec):
+
+    maxval = max(map(int, spec.keys()))
+    for key in range(maxval):
+        strkey = str(key)
+        if strkey not in spec:
+            spec[strkey] = {'label': 'Unknown'}
+    return spec
+
+
 def ctab_from_neuroparc_json(neuroparc_json_file=None, atlas_nifti_file=None):
+    """Extract colors and labels from a neuroparc JSON file."""
     import json
 
     if neuroparc_json_file is not None:
@@ -65,13 +108,23 @@ def create_annots(nifti_file, atlas, json_file=None):
     )
     rh_annot = f'annots/rh.{atlas}.annot'
     nb.freesurfer.write_annot(
-       rh_annot,
+        rh_annot,
         labels=rh_gii.agg_data().astype(np.int32),
         ctab=colors,
         names=names,
         fill_ctab=True,
     )
     return lh_annot, rh_annot
+
+
+def select_first(inlist):
+    """Select the first element of a list."""
+    return inlist[0]
+
+
+def select_second(inlist):
+    """Select the second element of a list."""
+    return inlist[1]
 
 
 def init_load_atlases_wf(name='load_atlases_wf'):
@@ -174,10 +227,38 @@ The following atlases were used in the workflow: {atlas_str}.
     )
     workflow.connect([(inputnode, outputnode, [('atlas_names', 'atlas_names')])])
 
-    for atlas in atlases:
+    lh_annots = pe.Node(
+        niu.Merge(len(atlases)),
+        name='lh_annots',
+    )
+    rh_annots = pe.Node(
+        niu.Merge(len(atlases)),
+        name='rh_annots',
+    )
+
+    for i_atlas, (atlas, info) in enumerate(atlases.items()):
+
+        if info['format'] in ['nifti', 'cifti']:
+            ...
+
         for hemi in ['L', 'R']:
+            annot_node = lh_annots if hemi == 'L' else rh_annots
+            selecter = select_first if hemi == 'L' else select_second
             # Identify space and file-type of the atlas
-            if atlases[atlas]['space'] == 'fsLR':
+            if info['space'] == 'MNI152NLin6Asym' and info['format'] == 'nifti':
+                # Convert MNI152NLin6Asym to annot
+                create_annot = pe.Node(
+                    niu.Function(
+                        function=create_annots,
+                    ),
+                    name=f'create_annot_{atlas}',
+                )
+                create_annot.inputs.atlas = atlas
+
+                # Warp fsaverage-annot to fsnative-annot
+                ...
+
+            elif info['space'] == 'fsLR' and info['format'] == 'gifti':
                 # Warp atlas from fsLR to fsaverage
                 warp_fslr_to_fsaverage = pe.Node(
                     niu.Function(
@@ -190,6 +271,34 @@ The following atlases were used in the workflow: {atlas_str}.
                 warp_fslr_to_fsaverage.inputs.method = 'nearest'
 
                 # Convert fsaverage to annot
+                ...
+
+                # Warp fsaverage-annot to fsnative-annot
+                ...
+
+            elif info['space'] == 'fsaverage' and info['format'] == 'gifti':
+                # Convert fsaverage to annot
+                create_annot = pe.Node(
+                    niu.Function(
+                        function=create_annots,
+                    ),
+                    name=f'create_annot_{atlas}',
+                )
+                create_annot.inputs.atlas = atlas
+
+                # Warp fsaverage-annot to fsnative-annot
+                ...
+
+                # Write out fsnative-annot files
+                workflow.connect([
+                    (create_annot, annot_node, [(('annot', selecter), f'in{i_atlas + 1}')]),
+                ])  # fmt:skip
+
+            elif info['space'] == 'fsnative' and info['format'] == 'annot':
+                # Write out fsnative-annot files
+                workflow.connect([
+                    (inputnode, annot_node, [(('atlas_file', selecter), f'in{i_atlas + 1}')]),
+                ])  # fmt:skip
 
     atlas_srcs = pe.MapNode(
         BIDSURI(
@@ -401,7 +510,7 @@ def init_parcellate_fsaverage_wf(
         CiftiParcellateWorkbench(
             direction='COLUMN',
             only_numeric=True,
-            out_file=f'parcellated_data.{'ptseries' if compute_mask else 'pscalar'}.nii',
+            out_file=f'parcellated_data.{"ptseries" if compute_mask else "pscalar"}.nii',
             num_threads=config.nipype.omp_nthreads,
         ),
         name='parcellate_data',

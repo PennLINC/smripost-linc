@@ -18,6 +18,7 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
+  "neuromaps",
   "nipype >= 1.8.5",
   "nireports @ git+https://github.com/pennlinc/nireports.git@main",
   "nitransforms == 23.0.1",
