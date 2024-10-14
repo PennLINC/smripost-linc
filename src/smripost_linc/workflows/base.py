@@ -164,7 +164,7 @@ It is released under the [CC0]\
     if config.execution.derivatives:
         # Raw dataset + derivatives dataset
         config.loggers.workflow.info('Raw+derivatives workflow mode enabled')
-        # Just build a list of BOLD files right now
+        # Just build a list of anatomical files right now
         subject_data = collect_derivatives(
             raw_dataset=config.execution.layout,
             derivatives_dataset=None,

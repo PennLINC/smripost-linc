@@ -1,83 +1,41 @@
 {
     "name": "smripost_linc",
     "queries": {
-        "raw": {
-            "bold_raw": {
-                "datatype": "func",
-                "echo": null,
-                "part": [
-                    "mag",
-                    null
-                ],
-                "suffix": "bold",
-                "extension": [
-                    ".nii.gz",
-                    ".nii"
-                ]
-            }
-        },
         "derivatives": {
-            "bold_mni152nlin6asym": {
-                "datatype": "func",
+            "t1w": {
+                "datatype": "anat",
                 "echo": null,
                 "part": [
                     "mag",
                     null
                 ],
-                "res": "2",
-                "space": "MNI152NLin6Asym",
-                "desc": "preproc",
-                "suffix": "bold",
-                "extension": [
-                    ".nii.gz",
-                    ".nii"
-                ]
-            },
-            "bold_mask_mni152nlin6asym": {
-                "datatype": "func",
-                "echo": null,
-                "part": [
-                    "mag",
-                    null
-                ],
-                "res": "2",
-                "space": "MNI152NLin6Asym",
-                "desc": "brain",
-                "suffix": "mask",
-                "extension": [
-                    ".nii.gz",
-                    ".nii"
-                ]
-            },
-            "bold_mask_native": {
-                "datatype": "func",
-                "echo": null,
-                "part": [
-                    "mag",
-                    null
-                ],
-                "space": null,
-                "desc": "brain",
-                "suffix": "mask",
-                "extension": [
-                    ".nii.gz",
-                    ".nii"
-                ]
-            },
-            "bold_confounds": {
-                "datatype": "func",
-                "echo": null,
-                "part": [
-                    "mag",
-                    null
-                ],
-                "space": null,
                 "res": null,
-                "den": null,
-                "desc": "confounds",
-                "suffix": "timeseries",
+                "space": null,
+                "desc": "preproc",
+                "suffix": [
+                    "T1w"
+                ],
                 "extension": [
-                    ".tsv"
+                    ".nii.gz",
+                    ".nii"
+                ]
+            },
+            "t2w": {
+                "datatype": "anat",
+                "echo": null,
+                "part": [
+                    "mag",
+                    null
+                ],
+                "res": null,
+                "space": null,
+                "desc": "preproc",
+                "suffix": [
+                    "T2w"
+                ],
+                "extension": [
+                    ".nii.gz",
+                    ".nii"
                 ]
             },
             "anat_mni152nlin6asym": {
@@ -113,29 +71,6 @@
             }
         },
         "transforms": {
-            "bold_hmc": {
-                "datatype": "func",
-                "from": "orig",
-                "to": "boldref",
-                "mode": "image",
-                "suffix": "xfm",
-                "extension": ".txt"
-            },
-            "boldref2anat": {
-                "datatype": "func",
-                "from": "boldref",
-                "to": ["anat", "T1w", "T2w"],
-                "mode": "image",
-                "suffix": "xfm",
-                "extension": ".txt"
-            },
-            "boldref2fmap": {
-                "datatype": "func",
-                "from": "orig",
-                "mode": "image",
-                "suffix": "xfm",
-                "extension": ".txt"
-            },
             "anat2mni152nlin6asym": {
                 "datatype": "anat",
                 "run": null,

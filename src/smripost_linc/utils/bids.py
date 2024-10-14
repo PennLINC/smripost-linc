@@ -8,6 +8,8 @@ from pathlib import Path
 
 from bids.layout import BIDSLayout
 from bids.utils import listify
+from nipype.interfaces.base import isdefined
+from nipype.interfaces.utility.base import _ravel
 from niworkflows.utils.spaces import SpatialReferences
 
 from smripost_linc.data import load as load_data
@@ -28,12 +30,12 @@ def extract_entities(file_list: str | list[str]) -> dict:
 
     Examples
     --------
-    >>> extract_entities("sub-01/anat/sub-01_T1w.nii.gz")
+    >>> extract_entities('sub-01/anat/sub-01_T1w.nii.gz')
     {'subject': '01', 'suffix': 'T1w', 'datatype': 'anat', 'extension': '.nii.gz'}
-    >>> extract_entities(["sub-01/anat/sub-01_T1w.nii.gz"] * 2)
+    >>> extract_entities(['sub-01/anat/sub-01_T1w.nii.gz'] * 2)
     {'subject': '01', 'suffix': 'T1w', 'datatype': 'anat', 'extension': '.nii.gz'}
-    >>> extract_entities(["sub-01/anat/sub-01_run-1_T1w.nii.gz",
-    ...                   "sub-01/anat/sub-01_run-2_T1w.nii.gz"])
+    >>> extract_entities(['sub-01/anat/sub-01_run-1_T1w.nii.gz',
+    ...                   'sub-01/anat/sub-01_run-2_T1w.nii.gz'])
     {'subject': '01', 'run': [1, 2], 'suffix': 'T1w', 'datatype': 'anat', 'extension': '.nii.gz'}
 
     """
@@ -328,7 +330,7 @@ def write_derivative_description(input_dir, output_dir, dataset_links=None):
     if 'SMRIPOST_LINC_DOCKER_TAG' in os.environ:
         desc['GeneratedBy'][0]['Container'] = {
             'Type': 'docker',
-            'Tag': f'pennlinc/smripost_linc:{os.environ["SMRIPOST_LINC_DOCKER_TAG"]}',
+            'Tag': f"pennlinc/smripost_linc:{os.environ['SMRIPOST_LINC_DOCKER_TAG']}",
         }
 
     if 'SMRIPOST_LINC__SINGULARITY_URL' in os.environ:
@@ -345,7 +347,7 @@ def write_derivative_description(input_dir, output_dir, dataset_links=None):
     desc['DatasetLinks'] = desc.get('DatasetLinks', {})
     for k, v in dataset_links.items():
         if k in desc['DatasetLinks'].keys() and str(desc['DatasetLinks'][k]) != str(v):
-            print(f'"{k}" is already a dataset link. Overwriting.')
+            print(f"'{k}' is already a dataset link. Overwriting.")
 
         desc['DatasetLinks'][k] = str(v)
 
@@ -451,3 +453,81 @@ def validate_input_dir(exec_env, bids_dir, participant_label, need_T1w=True):
             subprocess.check_call(['bids-validator', str(bids_dir), '-c', temp.name])  # noqa: S607
         except FileNotFoundError:
             print('bids-validator does not appear to be installed', file=sys.stderr)
+
+
+def _find_nearest_path(path_dict, input_path):
+    """Find the nearest relative path from an input path to a dictionary of paths.
+
+    If ``input_path`` is not relative to any of the paths in ``path_dict``,
+    the absolute path string is returned.
+    If ``input_path`` is already a BIDS-URI, then it will be returned unmodified.
+
+    Parameters
+    ----------
+    path_dict : dict of (str, Path)
+        A dictionary of paths.
+    input_path : Path
+        The input path to match.
+
+    Returns
+    -------
+    matching_path : str
+        The nearest relative path from the input path to a path in the dictionary.
+        This is either the concatenation of the associated key from ``path_dict``
+        and the relative path from the associated value from ``path_dict`` to ``input_path``,
+        or the absolute path to ``input_path`` if no matching path is found from ``path_dict``.
+
+    Examples
+    --------
+    >>> from pathlib import Path
+    >>> path_dict = {
+    ...     'bids::': Path('/data/derivatives/fmriprep'),
+    ...     'bids:raw:': Path('/data'),
+    ...     'bids:deriv-0:': Path('/data/derivatives/source-1'),
+    ... }
+    >>> input_path = Path('/data/derivatives/source-1/sub-01/func/sub-01_task-rest_bold.nii.gz')
+    >>> _find_nearest_path(path_dict, input_path)  # match to 'bids:deriv-0:'
+    'bids:deriv-0:sub-01/func/sub-01_task-rest_bold.nii.gz'
+    >>> input_path = Path('/out/sub-01/func/sub-01_task-rest_bold.nii.gz')
+    >>> _find_nearest_path(path_dict, input_path)  # no match- absolute path
+    '/out/sub-01/func/sub-01_task-rest_bold.nii.gz'
+    >>> input_path = Path('/data/sub-01/func/sub-01_task-rest_bold.nii.gz')
+    >>> _find_nearest_path(path_dict, input_path)  # match to 'bids:raw:'
+    'bids:raw:sub-01/func/sub-01_task-rest_bold.nii.gz'
+    >>> input_path = 'bids::sub-01/func/sub-01_task-rest_bold.nii.gz'
+    >>> _find_nearest_path(path_dict, input_path)  # already a BIDS-URI
+    'bids::sub-01/func/sub-01_task-rest_bold.nii.gz'
+    """
+    # Don't modify BIDS-URIs
+    if isinstance(input_path, str) and input_path.startswith('bids:'):
+        return input_path
+
+    input_path = Path(input_path)
+    matching_path = None
+    for key, path in path_dict.items():
+        if input_path.is_relative_to(path):
+            relative_path = input_path.relative_to(path)
+            if (matching_path is None) or (len(relative_path.parts) < len(matching_path.parts)):
+                matching_key = key
+                matching_path = relative_path
+
+    if matching_path is None:
+        matching_path = str(input_path.absolute())
+    else:
+        matching_path = f'{matching_key}{matching_path}'
+
+    return matching_path
+
+
+def _get_bidsuris(in_files, dataset_links, out_dir):
+    """Convert input paths to BIDS-URIs using a dictionary of dataset links."""
+    in_files = listify(in_files)
+    in_files = _ravel(in_files)
+    # Remove undefined inputs
+    in_files = [f for f in in_files if isdefined(f)]
+    # Convert the dataset links to BIDS URI prefixes
+    updated_keys = {f'bids:{k}:': Path(v) for k, v in dataset_links.items()}
+    updated_keys['bids::'] = Path(out_dir)
+    # Convert the paths to BIDS URIs
+    out = [_find_nearest_path(updated_keys, f) for f in in_files]
+    return out
