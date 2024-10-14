@@ -161,7 +161,7 @@ It is released under the [CC0]\
     entities = config.execution.bids_filters or {}
     entities['subject'] = subject_id
 
-    if config.execution.derivatives:
+    if config.execution.datasets:
         # Raw dataset + derivatives dataset
         config.loggers.workflow.info('Raw+derivatives workflow mode enabled')
         # Just build a list of anatomical files right now
@@ -263,95 +263,62 @@ Functional data postprocessing
 """
     workflow.__desc__ += func_pre_desc
 
-    for bold_file in subject_data['bold']:
-        single_run_wf = init_single_run_wf(bold_file)
+    for anat_file in subject_data['bold']:
+        single_run_wf = init_single_run_wf(anat_file)
         workflow.add_nodes([single_run_wf])
 
     return clean_datasinks(workflow)
 
 
-def init_single_run_wf(bold_file):
+def init_single_run_wf(anat_file):
     """Set up a single-run workflow for sMRIPost-LINC."""
     from fmriprep.utils.misc import estimate_bold_mem_usage
-    from nipype.interfaces import utility as niu
     from niworkflows.engine.workflows import LiterateWorkflow as Workflow
 
     from smripost_linc.utils.bids import collect_derivatives, extract_entities
-    from smripost_linc.workflows.aroma import init_denoise_wf, init_ica_aroma_wf
-    from smripost_linc.workflows.outputs import init_func_fit_reports_wf
+    from smripost_linc.workflows.freesurfer import init_postprocess_freesurfer_wf
+    from smripost_linc.workflows.outputs import init_anat_fit_reports_wf
 
     spaces = config.workflow.spaces
-    omp_nthreads = config.nipype.omp_nthreads
 
-    workflow = Workflow(name=_get_wf_name(bold_file, 'single_run'))
+    workflow = Workflow(name=_get_wf_name(anat_file, 'single_run'))
     workflow.__desc__ = ''
 
-    bold_metadata = config.execution.layout.get_metadata(bold_file)
-    mem_gb = estimate_bold_mem_usage(bold_file)[1]
+    anat_metadata = config.execution.layout.get_metadata(anat_file)
+    mem_gb = estimate_bold_mem_usage(anat_file)[1]
 
-    entities = extract_entities(bold_file)
+    entities = extract_entities(anat_file)
 
-    # Attempt to extract the associated fmap ID
-    fmapid = None
-    all_fmapids = config.execution.layout.get_fmapids(
-        subject=entities['subject'],
-        session=entities.get('session', None),
-    )
-    if all_fmapids:
-        fmap_file = config.execution.layout.get_nearest(
-            bold_file,
-            to=all_fmapids,
-            suffix='xfm',
-            extension='.txt',
-            strict=False,
-            **{'from': 'boldref'},
-        )
-        fmapid = config.execution.layout.get_file(fmap_file).entities['to']
-
-    functional_cache = defaultdict(list, {})
-    if config.execution.derivatives:
+    anatomical_cache = defaultdict(list, {})
+    if config.execution.datasets:
         # Collect native-space derivatives and transforms
-        functional_cache = collect_derivatives(
+        anatomical_cache = collect_derivatives(
             raw_dataset=config.execution.layout,
             derivatives_dataset=None,
             entities=entities,
-            fieldmap_id=fmapid,
             allow_multiple=False,
             spaces=None,
         )
-        for deriv_dir in config.execution.derivatives.values():
-            functional_cache = update_dict(
-                functional_cache,
+        for deriv_dir in config.execution.datasets.values():
+            anatomical_cache = update_dict(
+                anatomical_cache,
                 collect_derivatives(
                     raw_dataset=None,
                     derivatives_dataset=deriv_dir,
                     entities=entities,
-                    fieldmap_id=fmapid,
                     allow_multiple=False,
                     spaces=spaces,
                 ),
             )
 
-        if not functional_cache['bold_confounds']:
-            if config.workflow.dummy_scans is None:
-                raise ValueError(
-                    'No confounds detected. '
-                    'Automatical dummy scan detection cannot be performed. '
-                    'Please set the `--dummy-scans` flag explicitly.'
-                )
-
-            # TODO: Calculate motion parameters from motion correction transform
-            raise ValueError('Motion parameters cannot be extracted from transforms yet.')
-
     else:
         # Collect MNI152NLin6Asym:res-2 derivatives
         # Only derivatives dataset was passed in, so we expected standard-space derivatives
-        functional_cache.update(
+        anatomical_cache.update(
             collect_derivatives(
                 raw_dataset=None,
                 derivatives_dataset=config.execution.layout,
                 entities=entities,
-                fieldmap_id=fmapid,
                 allow_multiple=False,
                 spaces=spaces,
             ),
@@ -359,170 +326,27 @@ def init_single_run_wf(bold_file):
 
     config.loggers.workflow.info(
         (
-            f'Collected run data for {os.path.basename(bold_file)}:\n'
-            f'{yaml.dump(functional_cache, default_flow_style=False, indent=4)}'
+            f'Collected run data for {os.path.basename(anat_file)}:\n'
+            f'{yaml.dump(anatomical_cache, default_flow_style=False, indent=4)}'
         ),
     )
 
-    if config.workflow.dummy_scans is not None:
-        skip_vols = config.workflow.dummy_scans
-    else:
-        if not functional_cache['bold_confounds']:
-            raise ValueError(
-                'No confounds detected. '
-                'Automatical dummy scan detection cannot be performed. '
-                'Please set the `--dummy-scans` flag explicitly.'
-            )
-        skip_vols = get_nss(functional_cache['bold_confounds'])
-
-    # Run ICA-AROMA
-    ica_aroma_wf = init_ica_aroma_wf(bold_file=bold_file, metadata=bold_metadata, mem_gb=mem_gb)
-    ica_aroma_wf.inputs.inputnode.confounds = functional_cache['bold_confounds']
-    ica_aroma_wf.inputs.inputnode.skip_vols = skip_vols
-
-    mni6_buffer = pe.Node(niu.IdentityInterface(fields=['bold', 'bold_mask']), name='mni6_buffer')
-
-    if ('bold_mni152nlin6asym' not in functional_cache) and ('bold_raw' in functional_cache):
-        # Resample to MNI152NLin6Asym:res-2, for ICA-AROMA classification
-        from fmriprep.workflows.bold.apply import init_bold_volumetric_resample_wf
-        from fmriprep.workflows.bold.stc import init_bold_stc_wf
-        from niworkflows.interfaces.header import ValidateImage
-        from templateflow.api import get as get_template
-
-        from smripost_linc.interfaces.misc import ApplyTransforms
-
-        workflow.__desc__ += """\
-Raw BOLD series were resampled to MNI152NLin6Asym:res-2, for ICA-AROMA classification.
-"""
-
-        validate_bold = pe.Node(
-            ValidateImage(in_file=functional_cache['bold_raw']),
-            name='validate_bold',
-        )
-
-        stc_buffer = pe.Node(
-            niu.IdentityInterface(fields=['bold_file']),
-            name='stc_buffer',
-        )
-        run_stc = ('SliceTiming' in bold_metadata) and 'slicetiming' not in config.workflow.ignore
-        if run_stc:
-            bold_stc_wf = init_bold_stc_wf(
-                mem_gb=mem_gb,
-                metadata=bold_metadata,
-                name='bold_stc_wf',
-            )
-            bold_stc_wf.inputs.inputnode.skip_vols = skip_vols
-            workflow.connect([
-                (validate_bold, bold_stc_wf, [('out_file', 'inputnode.bold_file')]),
-                (bold_stc_wf, stc_buffer, [('outputnode.stc_file', 'bold_file')]),
-            ])  # fmt:skip
-        else:
-            workflow.connect([(validate_bold, stc_buffer, [('out_file', 'bold_file')])])
-
-        mni6_mask = str(
-            get_template(
-                'MNI152NLin6Asym',
-                resolution=2,
-                desc='brain',
-                suffix='mask',
-                extension=['.nii', '.nii.gz'],
-            )
-        )
-
-        bold_MNI6_wf = init_bold_volumetric_resample_wf(
-            metadata=bold_metadata,
-            fieldmap_id=None,  # XXX: Ignoring the field map for now
-            omp_nthreads=omp_nthreads,
-            mem_gb=mem_gb,
-            jacobian='fmap-jacobian' not in config.workflow.ignore,
-            name='bold_MNI6_wf',
-        )
-        bold_MNI6_wf.inputs.inputnode.motion_xfm = functional_cache['bold_hmc']
-        bold_MNI6_wf.inputs.inputnode.boldref2fmap_xfm = functional_cache['boldref2fmap']
-        bold_MNI6_wf.inputs.inputnode.boldref2anat_xfm = functional_cache['boldref2anat']
-        bold_MNI6_wf.inputs.inputnode.anat2std_xfm = functional_cache['anat2mni152nlin6asym']
-        bold_MNI6_wf.inputs.inputnode.resolution = '02'
-        # use mask as boldref?
-        bold_MNI6_wf.inputs.inputnode.bold_ref_file = functional_cache['bold_mask_native']
-        bold_MNI6_wf.inputs.inputnode.target_mask = mni6_mask
-        bold_MNI6_wf.inputs.inputnode.target_ref_file = mni6_mask
-
-        workflow.connect([
-            # Resample BOLD to MNI152NLin6Asym, may duplicate bold_std_wf above
-            # XXX: Ignoring the field map for now
-            # (inputnode, bold_MNI6_wf, [
-            #     ('fmap_ref', 'inputnode.fmap_ref'),
-            #     ('fmap_coeff', 'inputnode.fmap_coeff'),
-            #     ('fmap_id', 'inputnode.fmap_id'),
-            # ]),
-            (stc_buffer, bold_MNI6_wf, [('bold_file', 'inputnode.bold_file')]),
-            (bold_MNI6_wf, mni6_buffer, [('outputnode.bold_file', 'bold')]),
-        ])  # fmt:skip
-
-        # Warp the mask as well
-        mask_to_mni6 = pe.Node(
-            ApplyTransforms(
-                interpolation='GenericLabel',
-                input_image=functional_cache['bold_mask_native'],
-                reference_image=mni6_mask,
-                transforms=[
-                    functional_cache['anat2mni152nlin6asym'],
-                    functional_cache['boldref2anat'],
-                ],
-            ),
-            name='mask_to_mni6',
-        )
-        workflow.connect([(mask_to_mni6, mni6_buffer, [('output_image', 'bold_mask')])])
-
-    elif 'bold_mni152nlin6asym' in functional_cache:
-        workflow.__desc__ += """\
-Preprocessed BOLD series in MNI152NLin6Asym:res-2 space were collected for ICA-AROMA
-classification.
-"""
-        mni6_buffer.inputs.bold = functional_cache['bold_mni152nlin6asym']
-        mni6_buffer.inputs.bold_mask = functional_cache['bold_mask_mni152nlin6asym']
-
-    else:
-        raise ValueError('No valid BOLD series found for ICA-AROMA classification.')
-
-    workflow.connect([
-        (mni6_buffer, ica_aroma_wf, [
-            ('bold', 'inputnode.bold_std'),
-            ('bold_mask', 'inputnode.bold_mask_std'),
-        ]),
-    ])  # fmt:skip
+    # Run single-run processing
+    postprocess_freesurfer_wf = init_postprocess_freesurfer_wf(
+        anat_file=anat_file, metadata=anat_metadata, mem_gb=mem_gb
+    )
 
     # Generate reportlets
-    func_fit_reports_wf = init_func_fit_reports_wf(output_dir=config.execution.output_dir)
-    func_fit_reports_wf.inputs.inputnode.source_file = bold_file
-    func_fit_reports_wf.inputs.inputnode.anat2std_xfm = functional_cache['anat2mni152nlin6asym']
-    func_fit_reports_wf.inputs.inputnode.anat_dseg = functional_cache['anat_dseg']
-    workflow.connect([(mni6_buffer, func_fit_reports_wf, [('bold', 'inputnode.bold_mni6')])])
-
-    if config.workflow.denoise_method:
-        # Now denoise the output-space BOLD data using ICA-AROMA
-        denoise_wf = init_denoise_wf(bold_file=bold_file, metadata=bold_metadata)
-        denoise_wf.inputs.inputnode.skip_vols = skip_vols
-        denoise_wf.inputs.inputnode.space = 'MNI152NLin6Asym'
-        denoise_wf.inputs.inputnode.res = '2'
-        denoise_wf.inputs.inputnode.confounds_file = functional_cache['bold_confounds']
-
-        workflow.connect([
-            (mni6_buffer, denoise_wf, [
-                ('bold', 'inputnode.bold_file'),
-                ('bold_mask', 'inputnode.bold_mask'),
-            ]),
-            (ica_aroma_wf, denoise_wf, [
-                ('outputnode.mixing', 'inputnode.mixing'),
-                ('outputnode.aroma_features', 'inputnode.classifications'),
-            ]),
-        ])  # fmt:skip
+    anat_fit_reports_wf = init_anat_fit_reports_wf(output_dir=config.execution.output_dir)
+    anat_fit_reports_wf.inputs.inputnode.source_file = anat_file
+    anat_fit_reports_wf.inputs.inputnode.anat2std_xfm = anatomical_cache['anat2mni152nlin6asym']
+    anat_fit_reports_wf.inputs.inputnode.anat_dseg = anatomical_cache['anat_dseg']
 
     # Fill-in datasinks seen so far
     for node in workflow.list_node_names():
         if node.split('.')[-1].startswith('ds_'):
             workflow.get_node(node).inputs.base_directory = config.execution.output_dir
-            workflow.get_node(node).inputs.source_file = bold_file
+            workflow.get_node(node).inputs.source_file = anat_file
 
     return workflow
 

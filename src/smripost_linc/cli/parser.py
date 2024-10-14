@@ -243,7 +243,7 @@ def _build_parser(**kwargs):
         help=(
             'Search PATH(s) for pre-computed derivatives or BIDS-atlas datasets. '
             'These may be provided as named folders '
-            '(e.g., `--derivatives smriprep=/path/to/smriprep`).'
+            '(e.g., `--datasets smriprep=/path/to/smriprep`).'
         ),
     )
     g_bids.add_argument(
@@ -526,7 +526,7 @@ def parse_args(args=None, namespace=None):
 
     bids_dir = config.execution.bids_dir
     output_dir = config.execution.output_dir
-    derivatives = config.execution.derivatives
+    datasets = config.execution.datasets
     work_dir = config.execution.work_dir
     version = config.environment.version
 
@@ -559,7 +559,7 @@ def parse_args(args=None, namespace=None):
         )
 
     # Validate raw inputs if running in raw+derivatives mode
-    if derivatives and not opts.skip_bids_validation:
+    if datasets and not opts.skip_bids_validation:
         from smripost_linc.utils.bids import validate_input_dir
 
         build_log.info(
