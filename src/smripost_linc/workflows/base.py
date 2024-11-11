@@ -161,42 +161,25 @@ It is released under the [CC0]\
     entities = config.execution.bids_filters or {}
     entities['subject'] = subject_id
 
-    if config.execution.datasets:
-        # Raw dataset + derivatives dataset
-        config.loggers.workflow.info('Raw+derivatives workflow mode enabled')
-        # Just build a list of anatomical files right now
-        subject_data = collect_derivatives(
-            raw_dataset=config.execution.layout,
-            derivatives_dataset=None,
-            entities=entities,
-            fieldmap_id=None,
-            allow_multiple=True,
-            spaces=None,
-        )
-        subject_data['bold'] = listify(subject_data['bold_raw'])
-    else:
-        # Derivatives dataset only
-        config.loggers.workflow.info('Derivatives-only workflow mode enabled')
-        # Just build a list of BOLD files right now
-        subject_data = collect_derivatives(
-            raw_dataset=None,
-            derivatives_dataset=config.execution.layout,
-            entities=entities,
-            fieldmap_id=None,
-            allow_multiple=True,
-            spaces=None,
-        )
-        # Patch standard-space BOLD files into 'bold' key
-        subject_data['bold'] = listify(subject_data['bold_mni152nlin6asym'])
+    subject_data = collect_derivatives(
+        derivatives_dataset=config.execution.layout,
+        entities=entities,
+        fieldmap_id=None,
+        allow_multiple=True,
+        spaces=None,
+    )
+    subject_data['anat'] = None
+    if subject_data['t1w']:
+        subject_data['anat'] = listify(subject_data['t1w'])
+    elif subject_data['t2w']:
+        subject_data['anat'] = listify(subject_data['t2w'])
 
     # Make sure we always go through these two checks
-    if not subject_data['bold']:
-        task_id = config.execution.task_id
+    if not subject_data['anat']:
         raise RuntimeError(
-            f"No BOLD images found for participant {subject_id} and "
-            f"task {task_id if task_id else '<all>'}. "
-            "All workflows require BOLD images. "
-            f"Please check your BIDS filters: {config.execution.bids_filters}."
+            f'No anatomical images found for participant {subject_id}. '
+            'All workflows require anatomical images. '
+            f'Please check your BIDS filters: {config.execution.bids_filters}.'
         )
 
     config.loggers.workflow.info(
@@ -263,7 +246,7 @@ Functional data postprocessing
 """
     workflow.__desc__ += func_pre_desc
 
-    for anat_file in subject_data['bold']:
+    for anat_file in subject_data['anat']:
         single_run_wf = init_single_run_wf(anat_file)
         workflow.add_nodes([single_run_wf])
 
@@ -288,6 +271,13 @@ def init_single_run_wf(anat_file):
     mem_gb = estimate_bold_mem_usage(anat_file)[1]
 
     entities = extract_entities(anat_file)
+
+    # Collect the segmentation results
+    # First look for subject+session Freesurfer folder
+
+    # Then look for subject-only Freesurfer folder
+
+    # Then MCRIBS? Then Infant-FS?
 
     anatomical_cache = defaultdict(list, {})
     if config.execution.datasets:
