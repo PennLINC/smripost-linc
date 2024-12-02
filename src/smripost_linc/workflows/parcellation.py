@@ -19,20 +19,6 @@ def remove_non_alphabetic(input_string):
     return clean_string
 
 
-def _create_colors(n_colors):
-    import numpy as np
-
-    color_set = {(0, 0, 0, 0)}
-    while len(color_set) < n_colors:
-        new_color = tuple((np.random.rand(3) * 155).astype(np.int32)) + (0,)
-        color_set.add(new_color)
-    color_mat = np.array(sorted(color_set))
-    if color_mat.shape[0] != n_colors:
-        raise ValueError(f'Could not generate {n_colors} unique colors.')
-
-    return color_mat
-
-
 def fake_neuroparc_from_nifti(nifti_file):
     """Create a fake neuroparc JSON from a nifti file."""
     import nibabel as nb
@@ -44,7 +30,6 @@ def fake_neuroparc_from_nifti(nifti_file):
 
 
 def fill_missing_parc(spec):
-
     maxval = max(map(int, spec.keys()))
     for key in range(maxval):
         strkey = str(key)
@@ -166,6 +151,7 @@ def init_load_atlases_wf(name='load_atlases_wf'):
     from smripost_linc.interfaces.bids import DerivativesDataSink
     from smripost_linc.utils.bids import collect_atlases
     from smripost_linc.utils.boilerplate import describe_atlases
+    from smripost_linc.utils.parcellation import gifti_to_annot
 
     workflow = Workflow(name=name)
     output_dir = config.execution.output_dir
@@ -315,6 +301,14 @@ The following atlases were used in the workflow: {atlas_str}.
                 workflow.connect([
                     (inputnode, annot_node, [(('atlas_file', selecter), f'in{i_atlas + 1}')]),
                 ])  # fmt:skip
+
+            if info['format'] != 'annot':
+                convert_gifti_to_annot = pe.Node(
+                    niu.Function(
+                        function=gifti_to_annot,
+                    ),
+                    name=f'convert_gifti_to_annot_{atlas}_{hemi}',
+                )
 
     atlas_srcs = pe.MapNode(
         BIDSURI(
