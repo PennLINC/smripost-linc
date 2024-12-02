@@ -26,6 +26,7 @@ sMRIPost-LINC workflows
 
 .. autofunction:: init_smripost_linc_wf
 .. autofunction:: init_single_subject_wf
+.. autofunction:: init_single_run_wf
 
 """
 
