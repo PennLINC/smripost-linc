@@ -164,7 +164,7 @@ def init_load_atlases_wf(name='load_atlases_wf'):
     atlas_labels_files
     """
     from smripost_linc.interfaces.bids import DerivativesDataSink
-    from smripost_linc.utils.atlas import collect_atlases
+    from smripost_linc.utils.bids import collect_atlases
     from smripost_linc.utils.boilerplate import describe_atlases
 
     workflow = Workflow(name=name)
@@ -237,8 +237,18 @@ The following atlases were used in the workflow: {atlas_str}.
     )
 
     for i_atlas, (atlas, info) in enumerate(atlases.items()):
-
-        if info['format'] in ['nifti', 'cifti']:
+        gifti_buffer = pe.Node(
+            niu.IdentityInterface(fields=['lh_gifti', 'rh_gifti']),
+            name=f'gifti_buffer_{atlas}',
+        )
+        if info['format'] == 'gifti':
+            gifti_buffer.inputs.lh_gifti = info['image'][0]
+            gifti_buffer.inputs.rh_gifti = info['image'][1]
+        elif info['format'] == 'cifti':
+            # Split CIFTI into GIFTIs
+            ...
+        else:
+            # Convert NIfTI to GIFTI
             ...
 
         for hemi in ['L', 'R']:
@@ -258,7 +268,10 @@ The following atlases were used in the workflow: {atlas_str}.
                 # Warp fsaverage-annot to fsnative-annot
                 ...
 
-            elif info['space'] == 'fsLR' and info['format'] == 'gifti':
+            elif info['format'] == 'nifti':
+                raise NotImplementedError('Only MNI152NLin6Asym NIfTI atlases are supported.')
+
+            elif info['space'] == 'fsLR':
                 # Warp atlas from fsLR to fsaverage
                 warp_fslr_to_fsaverage = pe.Node(
                     niu.Function(
@@ -269,6 +282,9 @@ The following atlases were used in the workflow: {atlas_str}.
                 warp_fslr_to_fsaverage.inputs.target_density = '164k'
                 warp_fslr_to_fsaverage.inputs.hemi = hemi
                 warp_fslr_to_fsaverage.inputs.method = 'nearest'
+                workflow.connect([
+                    (gifti_buffer, warp_fslr_to_fsaverage, [(f'{hemi.lower()}_gifti', 'in_file')]),
+                ])  # fmt:skip
 
                 # Convert fsaverage to annot
                 ...
@@ -276,7 +292,7 @@ The following atlases were used in the workflow: {atlas_str}.
                 # Warp fsaverage-annot to fsnative-annot
                 ...
 
-            elif info['space'] == 'fsaverage' and info['format'] == 'gifti':
+            elif info['space'] == 'fsaverage':
                 # Convert fsaverage to annot
                 create_annot = pe.Node(
                     niu.Function(

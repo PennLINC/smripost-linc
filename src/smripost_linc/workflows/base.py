@@ -133,7 +133,7 @@ def init_single_subject_wf(subject_id: str):
     workflow = Workflow(name=f'sub_{subject_id}_wf')
     workflow.__desc__ = f"""
 Results included in this manuscript come from postprocessing
-performed using *sMRIPost-LINC* {config.environment.version} (@ica_aroma),
+performed using *sMRIPost-LINC* {config.environment.version},
 which is based on *Nipype* {config.environment.nipype_version}
 (@nipype1; @nipype2; RRID:SCR_002502).
 
@@ -175,7 +175,7 @@ It is released under the [CC0]\
     elif subject_data['t2w']:
         subject_data['anat'] = listify(subject_data['t2w'])
 
-    # Make sure we always go through these two checks
+    # Make sure we always check that we have an anatomical image
     if not subject_data['anat']:
         raise RuntimeError(
             f'No anatomical images found for participant {subject_id}. '
@@ -237,16 +237,6 @@ It is released under the [CC0]\
     )
     workflow.connect([(about, ds_report_about, [('out_report', 'in_file')])])
 
-    # Append the functional section to the existing anatomical excerpt
-    # That way we do not need to stream down the number of bold datasets
-    func_pre_desc = f"""
-Functional data postprocessing
-
-: For each of the {len(subject_data['bold'])} BOLD runs found per subject
-(across all tasks and sessions), the following postprocessing was performed.
-"""
-    workflow.__desc__ += func_pre_desc
-
     for anat_file in subject_data['anat']:
         single_run_wf = init_single_run_wf(anat_file)
         workflow.add_nodes([single_run_wf])
@@ -255,11 +245,16 @@ Functional data postprocessing
 
 
 def init_single_run_wf(anat_file):
-    """Set up a single-run workflow for sMRIPost-LINC."""
+    """Set up a single-run workflow for sMRIPost-LINC.
+
+    This workflow organizes the postprocessing pipeline for a single
+    preprocessed anatomical image.
+    """
     from fmriprep.utils.misc import estimate_bold_mem_usage
     from niworkflows.engine.workflows import LiterateWorkflow as Workflow
 
     from smripost_linc.utils.bids import collect_derivatives, extract_entities
+    from smripost_linc.utils.freesurfer import find_fs_path
     from smripost_linc.workflows.freesurfer import init_postprocess_freesurfer_wf
     from smripost_linc.workflows.outputs import init_anat_fit_reports_wf
 
@@ -274,9 +269,19 @@ def init_single_run_wf(anat_file):
     entities = extract_entities(anat_file)
 
     # Collect the segmentation results
-    # First look for subject+session Freesurfer folder
-
-    # Then look for subject-only Freesurfer folder
+    # Look for Freesurfer folder
+    anat_fs_dir = find_fs_path(
+        config.execution.fs_subjects_dir,
+        entities['subject'],
+        session_id=entities.get('session'),
+    )
+    if anat_fs_dir is None:
+        raise RuntimeError(
+            f'No FreeSurfer folder found for participant {entities["subject"]}. '
+            'All workflows require FreeSurfer output. '
+            'Please check your FreeSurfer subjects directory: '
+            f'{config.execution.fs_subjects_dir}.'
+        )
 
     # Then MCRIBS? Then Infant-FS?
 
@@ -317,14 +322,20 @@ def init_single_run_wf(anat_file):
 
     config.loggers.workflow.info(
         (
-            f'Collected run data for {os.path.basename(anat_file)}:\n'
+            f'Collected preprocessing derivatives for {os.path.basename(anat_file)}:\n'
             f'{yaml.dump(anatomical_cache, default_flow_style=False, indent=4)}'
         ),
     )
 
+    # Warp external atlases (fsLR or fsaverage space) to fsnative-space annot files
+
+
     # Run single-run processing
     postprocess_freesurfer_wf = init_postprocess_freesurfer_wf(
-        anat_file=anat_file, metadata=anat_metadata, mem_gb=mem_gb
+        anat_file=anat_file,
+        freesurfer_dir=anat_fs_dir,
+        metadata=anat_metadata,
+        mem_gb=mem_gb,
     )
 
     # Generate reportlets
