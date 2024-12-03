@@ -454,7 +454,7 @@ def init_warp_atlases_to_fsnative_wf(
     workflow.connect([
         (lh_fsnative_annots, outputnode, [('out', 'lh_fsnative_annots')]),
         (rh_fsnative_annots, outputnode, [('out', 'rh_fsnative_annots')]),
-    ])
+    ])  # fmt:skip
 
     return workflow
 
