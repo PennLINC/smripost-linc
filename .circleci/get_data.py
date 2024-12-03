@@ -2,7 +2,7 @@
 """Download test data."""
 import sys
 
-from xcp_d.tests.utils import download_test_data
+from smripost_linc.tests.utils import download_test_data
 
 if __name__ == "__main__":
     data_dir = sys.argv[1]

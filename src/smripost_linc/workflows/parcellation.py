@@ -324,9 +324,9 @@ def init_parcellate_fsaverage_wf(
             :graph2use: orig
             :simple_form: yes
 
-            from xcp_d.tests.tests import mock_config
-            from xcp_d import config
-            from xcp_d.workflows.connectivity import init_parcellate_cifti_wf
+            from smripost_linc.tests.tests import mock_config
+            from smripost_linc import config
+            from smripost_linc.workflows.connectivity import init_parcellate_cifti_wf
 
             with mock_config():
                 wf = init_parcellate_cifti_wf(mem_gb={'resampled': 2})
@@ -373,9 +373,9 @@ def init_parcellate_fsaverage_wf(
     coverage_tsv
         Coverage TSV files. One for each atlas. Only output if `compute_mask` is True.
     """
-    from xcp_d import config
-    from xcp_d.interfaces.connectivity import CiftiMask, CiftiToTSV, CiftiVertexMask
-    from xcp_d.interfaces.workbench import CiftiMath, CiftiParcellateWorkbench
+    from smripost_linc import config
+    from smripost_linc.interfaces.connectivity import CiftiMask, CiftiToTSV, CiftiVertexMask
+    from smripost_linc.interfaces.workbench import CiftiMath, CiftiParcellateWorkbench
 
     workflow = Workflow(name=name)
 

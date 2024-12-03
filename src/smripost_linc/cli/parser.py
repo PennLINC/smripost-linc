@@ -177,7 +177,7 @@ def _build_parser(**kwargs):
         dest='atlases',
         help=(
             'Selection of atlases to apply to the data. '
-            "All of XCP-D's built-in atlases are used by default."
+            "All of sMRIPost-LINC's built-in atlases are used by default."
         ),
     )
     g_parcellation.add_argument(

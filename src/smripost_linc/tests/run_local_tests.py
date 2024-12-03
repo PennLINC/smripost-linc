@@ -40,7 +40,8 @@ def _get_parser():
 def run_command(command, env=None):
     """Run a given shell command with certain environment variables set.
 
-    Keep this out of the real xcp_d code so that devs don't need to install ASLPrep to run tests.
+    Keep this out of the real smripost_linc code so that devs don't need to
+    install sMRIPost-LINC to run tests.
     """
     merged_env = os.environ
     if env:

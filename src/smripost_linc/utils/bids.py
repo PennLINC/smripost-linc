@@ -398,7 +398,7 @@ def write_derivative_description(input_dir, output_dir, dataset_links=None):
         This may be a raw BIDS dataset (in the case of raw+derivatives workflows)
         or a preprocessing derivatives dataset (in the case of derivatives-only workflows).
     output_dir : :obj:`str`
-        Path to the output xcp-d dataset.
+        Path to the output sMRIPost-LINC dataset.
     dataset_links : :obj:`dict`, optional
         Dictionary of dataset links to include in the dataset description.
     """
@@ -422,7 +422,7 @@ def write_derivative_description(input_dir, output_dir, dataset_links=None):
         desc = json.load(fobj)
 
     # Update dataset description
-    desc['Name'] = 'sMRIPost-LINC- ICA-AROMA Postprocessing Outputs'
+    desc['Name'] = 'sMRIPost-LINC- Anatomical Postprocessing Outputs'
     desc['BIDSVersion'] = '1.9.0dev'
     desc['DatasetType'] = 'derivative'
     desc['HowToAcknowledge'] = 'Include the generated boilerplate in the methods section.'

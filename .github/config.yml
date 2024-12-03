@@ -6,7 +6,7 @@ newPRWelcomeComment: >
   We have detected this is the first time you have contributed
   to *sMRIPost-LINC*.
   We ask you to read through the Contributing Guide:
-  https://github.com/pennlinc/xcp_d/blob/main/CONTRIBUTING.md
+  https://github.com/pennlinc/smripost_linc/blob/main/CONTRIBUTING.md
 
   These are guidelines intended to make communication easier by describing a consistent process, but
   don't worry if you don't get it everything exactly "right" on the first try.
@@ -15,7 +15,7 @@ newPRWelcomeComment: >
 
   1.  Consider starting a conversation in the issues list before submitting a pull request.
       The discussion might save you a lot of time coding.
-  2.  Any code you submit will be licensed under the same terms (BSD 3-Clause) as the rest of xcp_d.
+  2.  Any code you submit will be licensed under the same terms (BSD 3-Clause) as the rest of smripost_linc.
 
   A pull request is a conversation. We may ask you to make some changes before accepting your PR,
   and likewise, you should feel free to ask us any questions you have.

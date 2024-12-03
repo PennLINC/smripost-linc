@@ -6,19 +6,19 @@ orbs:
   &dockersetup
   docker:
     - image: pennlinc/xcp_d_build:0.0.19
-  working_directory: /src/xcp_d
+  working_directory: /src/smripost_linc
 
 runinstall:
   &runinstall
-  name: Install xcp_d
+  name: Install smripost_linc
   command: |
     VERSION=0+build
     if [[ -n "$CIRCLE_TAG" ]]; then
       VERSION="$CIRCLE_TAG"
     fi
     git checkout $CIRCLE_BRANCH
-    echo "${VERSION}" > /src/xcp_d/xcp_d/VERSION
-    echo "include xcp_d/VERSION" >> /src/xcp_d/MANIFEST.in
+    echo "${VERSION}" > /src/smripost_linc/smripost_linc/VERSION
+    echo "include smripost_linc/VERSION" >> /src/smripost_linc/MANIFEST.in
     pip install .[tests] --progress-bar off
 
     # Write the config file
@@ -45,12 +45,12 @@ jobs:
       - run:
           name: Download ds001419 fMRIPrep test data
           command: |
-            cd /src/xcp_d/.circleci
+            cd /src/smripost_linc/.circleci
             python get_data.py $PWD/data ds001419
       - save_cache:
           key: ds001419-10
           paths:
-            - /src/xcp_d/.circleci/data/ds001419
+            - /src/smripost_linc/.circleci/data/ds001419
     # The resource_class feature allows configuring CPU and RAM resources for each job. Different resource classes are available for different executors. https://circleci.com/docs/2.0/configuration-reference/#resourceclass
     # Why do we need a big executor for this job?
     resource_class: large
@@ -65,12 +65,12 @@ jobs:
       - run:
           name: Download ds001419 fMRIPost-AROMA test data
           command: |
-            cd /src/xcp_d/.circleci
+            cd /src/smripost_linc/.circleci
             python get_data.py $PWD/data ds001419-aroma
       - save_cache:
           key: ds001419-aroma-02
           paths:
-            - /src/xcp_d/.circleci/data/ds001419-aroma
+            - /src/smripost_linc/.circleci/data/ds001419-aroma
 
   download_data_schaefer100:
     <<: *dockersetup
@@ -82,12 +82,12 @@ jobs:
       - run:
           name: Download BIDS-Atlas dataset
           command: |
-            cd /src/xcp_d/.circleci
+            cd /src/smripost_linc/.circleci
             python get_data.py $PWD/data schaefer100
       - save_cache:
           key: schaefer100-02
           paths:
-            - /src/xcp_d/.circleci/data/schaefer100
+            - /src/smripost_linc/.circleci/data/schaefer100
 
   download_data_pnc:
     <<: *dockersetup
@@ -99,12 +99,12 @@ jobs:
       - run:
           name: Download pnc test data
           command: |
-            cd /src/xcp_d/.circleci
+            cd /src/smripost_linc/.circleci
             python get_data.py $PWD/data pnc
       - save_cache:
           key: pnc-02
           paths:
-            - /src/xcp_d/.circleci/data/pnc
+            - /src/smripost_linc/.circleci/data/pnc
     # The resource_class feature allows configuring CPU and RAM resources for each job. Different resource classes are available for different executors. https://circleci.com/docs/2.0/configuration-reference/#resourceclass
     resource_class: large
 
@@ -118,12 +118,12 @@ jobs:
       - run:
           name: Download ukbiobank test data
           command: |
-            cd /src/xcp_d/.circleci
+            cd /src/smripost_linc/.circleci
             python get_data.py $PWD/data ukbiobank
       - save_cache:
           key: ukbiobank-08
           paths:
-            - /src/xcp_d/.circleci/data/ukbiobank
+            - /src/smripost_linc/.circleci/data/ukbiobank
     # The resource_class feature allows configuring CPU and RAM resources for each job. Different resource classes are available for different executors. https://circleci.com/docs/2.0/configuration-reference/#resourceclass
     resource_class: large
 
@@ -137,12 +137,12 @@ jobs:
       - run:
           name: Download fmriprepwithoutfreesurfer test data
           command: |
-            cd /src/xcp_d/.circleci
+            cd /src/smripost_linc/.circleci
             python get_data.py $PWD/data fmriprepwithoutfreesurfer
       - save_cache:
           key: fmriprepwithoutfreesurfer-03
           paths:
-            - /src/xcp_d/.circleci/data/fmriprepwithoutfreesurfer
+            - /src/smripost_linc/.circleci/data/fmriprepwithoutfreesurfer
 
   download_data_nibabies:
     <<: *dockersetup
@@ -154,12 +154,12 @@ jobs:
       - run:
           name: Download nibabies test data
           command: |
-            cd /src/xcp_d/.circleci
+            cd /src/smripost_linc/.circleci
             python get_data.py $PWD/data nibabies
       - save_cache:
           key: nibabies-04
           paths:
-              - /src/xcp_d/.circleci/data/nibabies
+              - /src/smripost_linc/.circleci/data/nibabies
 
   nifti_without_freesurfer:
     <<: *dockersetup
@@ -171,7 +171,7 @@ jobs:
       - run:
           name: Check whether build should be skipped
           command: |
-            cd /src/xcp_d
+            cd /src/smripost_linc
             if [[ "$( git log --format=oneline -n 1 $CIRCLE_SHA1 | grep -i -E '\[skip[ _]?integration\]' )" != "" ]]; then
               echo "Skipping nifti_without_freesurfer build"
               circleci step halt
@@ -182,28 +182,28 @@ jobs:
           key: schaefer100-02
       - run: *runinstall
       - run:
-          name: Run full xcp_d on nifti without freesurfer
+          name: Run full smripost_linc on nifti without freesurfer
           no_output_timeout: 1h
           command: |
             pytest -rP -o log_cli=true -m "fmriprep_without_freesurfer" \
               --cov-append \
               --cov-branch \
               --cov-report term-missing \
-              --cov=xcp_d \
-              --data_dir=/src/xcp_d/.circleci/data \
-              --output_dir=/src/xcp_d/.circleci/out \
-              --working_dir=/src/xcp_d/.circleci/work \
-              xcp_d
+              --cov=smripost_linc \
+              --data_dir=/src/smripost_linc/.circleci/data \
+              --output_dir=/src/smripost_linc/.circleci/out \
+              --working_dir=/src/smripost_linc/.circleci/work \
+              smripost_linc
             mkdir /src/coverage
-            mv /src/xcp_d/.coverage /src/coverage/.coverage.fmriprep_without_freesurfer
+            mv /src/smripost_linc/.coverage /src/coverage/.coverage.fmriprep_without_freesurfer
             # remove nifti files before uploading artifacts
-            find /src/xcp_d/.circleci/out/ -name "*.nii.gz" -type f -delete
+            find /src/smripost_linc/.circleci/out/ -name "*.nii.gz" -type f -delete
       - persist_to_workspace:
           root: /src/coverage/
           paths:
             - .coverage.fmriprep_without_freesurfer
       - store_artifacts:
-          path: /src/xcp_d/.circleci/out/test_fmriprep_without_freesurfer/
+          path: /src/smripost_linc/.circleci/out/test_fmriprep_without_freesurfer/
 
   nifti_without_freesurfer_with_main:
     <<: *dockersetup
@@ -215,7 +215,7 @@ jobs:
       - run:
           name: Check whether build should be skipped
           command: |
-            cd /src/xcp_d
+            cd /src/smripost_linc
             if [[ "$( git log --format=oneline -n 1 $CIRCLE_SHA1 | grep -i -E '\[skip[ _]?integration\]' )" != "" ]]; then
               echo "Skipping nifti_without_freesurfer build"
               circleci step halt
@@ -224,28 +224,28 @@ jobs:
           key: fmriprepwithoutfreesurfer-03
       - run: *runinstall
       - run:
-          name: Run full xcp_d on nifti without freesurfer
+          name: Run full smripost_linc on nifti without freesurfer
           no_output_timeout: 1h
           command: |
             pytest -rP -o log_cli=true -m "fmriprep_without_freesurfer_with_main" \
               --cov-append \
               --cov-branch \
               --cov-report term-missing \
-              --cov=xcp_d \
-              --data_dir=/src/xcp_d/.circleci/data \
-              --output_dir=/src/xcp_d/.circleci/out \
-              --working_dir=/src/xcp_d/.circleci/work \
-              xcp_d
+              --cov=smripost_linc \
+              --data_dir=/src/smripost_linc/.circleci/data \
+              --output_dir=/src/smripost_linc/.circleci/out \
+              --working_dir=/src/smripost_linc/.circleci/work \
+              smripost_linc
             mkdir /src/coverage
-            mv /src/xcp_d/.coverage /src/coverage/.coverage.fmriprep_without_freesurfer_with_main
+            mv /src/smripost_linc/.coverage /src/coverage/.coverage.fmriprep_without_freesurfer_with_main
             # remove nifti files before uploading artifacts
-            find /src/xcp_d/.circleci/out/ -name "*.nii.gz" -type f -delete
+            find /src/smripost_linc/.circleci/out/ -name "*.nii.gz" -type f -delete
       - persist_to_workspace:
           root: /src/coverage/
           paths:
             - .coverage.fmriprep_without_freesurfer_with_main
       - store_artifacts:
-          path: /src/xcp_d/.circleci/out/test_fmriprep_without_freesurfer/
+          path: /src/smripost_linc/.circleci/out/test_fmriprep_without_freesurfer/
 
   ds001419_nifti:
     <<: *dockersetup
@@ -257,7 +257,7 @@ jobs:
       - run:
           name: Check whether build should be skipped
           command: |
-            cd /src/xcp_d
+            cd /src/smripost_linc
             if [[ "$( git log --format=oneline -n 1 $CIRCLE_SHA1 | grep -i -E '\[skip[ _]?integration\]' )" != "" ]]; then
               echo "Skipping ds001419_nifti build"
               circleci step halt
@@ -268,28 +268,28 @@ jobs:
           key: ds001419-aroma-02
       - run: *runinstall
       - run:
-          name: Run full xcp_d on nifti with freesurfer
+          name: Run full smripost_linc on nifti with freesurfer
           no_output_timeout: 1h
           command: |
             pytest -rP -o log_cli=true -m "ds001419_nifti" \
               --cov-append \
               --cov-branch \
               --cov-report term-missing \
-              --cov=xcp_d \
-              --data_dir=/src/xcp_d/.circleci/data \
-              --output_dir=/src/xcp_d/.circleci/out \
-              --working_dir=/src/xcp_d/.circleci/work \
-              xcp_d
+              --cov=smripost_linc \
+              --data_dir=/src/smripost_linc/.circleci/data \
+              --output_dir=/src/smripost_linc/.circleci/out \
+              --working_dir=/src/smripost_linc/.circleci/work \
+              smripost_linc
             mkdir /src/coverage
-            mv /src/xcp_d/.coverage /src/coverage/.coverage.ds001419_nifti
+            mv /src/smripost_linc/.coverage /src/coverage/.coverage.ds001419_nifti
             # remove nifti files before uploading artifacts
-            find /src/xcp_d/.circleci/out/ -name "*.nii.gz" -type f -delete
+            find /src/smripost_linc/.circleci/out/ -name "*.nii.gz" -type f -delete
       - persist_to_workspace:
           root: /src/coverage/
           paths:
             - .coverage.ds001419_nifti
       - store_artifacts:
-          path: /src/xcp_d/.circleci/out/test_ds001419_nifti/
+          path: /src/smripost_linc/.circleci/out/test_ds001419_nifti/
 
   ds001419_cifti:
     <<: *dockersetup
@@ -301,7 +301,7 @@ jobs:
       - run:
           name: Check whether build should be skipped
           command: |
-            cd /src/xcp_d
+            cd /src/smripost_linc
             if [[ "$( git log --format=oneline -n 1 $CIRCLE_SHA1 | grep -i -E '\[skip[ _]?integration\]' )" != "" ]]; then
               echo "Skipping ds001419_cifti build"
               circleci step halt
@@ -310,28 +310,28 @@ jobs:
           key: ds001419-10
       - run: *runinstall
       - run:
-          name: Run full xcp_d on cifti with freesurfer
+          name: Run full smripost_linc on cifti with freesurfer
           no_output_timeout: 1h
           command: |
             pytest -rP -o log_cli=true -m "ds001419_cifti" \
               --cov-append \
               --cov-branch \
               --cov-report term-missing \
-              --cov=xcp_d \
-              --data_dir=/src/xcp_d/.circleci/data \
-              --output_dir=/src/xcp_d/.circleci/out \
-              --working_dir=/src/xcp_d/.circleci/work \
-              xcp_d
+              --cov=smripost_linc \
+              --data_dir=/src/smripost_linc/.circleci/data \
+              --output_dir=/src/smripost_linc/.circleci/out \
+              --working_dir=/src/smripost_linc/.circleci/work \
+              smripost_linc
             mkdir /src/coverage
-            mv /src/xcp_d/.coverage /src/coverage/.coverage.ds001419_cifti
+            mv /src/smripost_linc/.coverage /src/coverage/.coverage.ds001419_cifti
             # remove nifti files before uploading artifacts
-            find /src/xcp_d/.circleci/out/ -name "*.nii.gz" -type f -delete
+            find /src/smripost_linc/.circleci/out/ -name "*.nii.gz" -type f -delete
       - persist_to_workspace:
           root: /src/coverage/
           paths:
             - .coverage.ds001419_cifti
       - store_artifacts:
-          path: /src/xcp_d/.circleci/out/test_ds001419_cifti/
+          path: /src/smripost_linc/.circleci/out/test_ds001419_cifti/
 
   ukbiobank:
     <<: *dockersetup
@@ -343,7 +343,7 @@ jobs:
       - run:
           name: Check whether build should be skipped
           command: |
-            cd /src/xcp_d
+            cd /src/smripost_linc
             if [[ "$( git log --format=oneline -n 1 $CIRCLE_SHA1 | grep -i -E '\[skip[ _]?integration\]' )" != "" ]]; then
               echo "Skipping ukbiobank build"
               circleci step halt
@@ -352,28 +352,28 @@ jobs:
           key: ukbiobank-08
       - run: *runinstall
       - run:
-          name: Run full xcp_d on UK Biobank data
+          name: Run full smripost_linc on UK Biobank data
           no_output_timeout: 1h
           command: |
             pytest -rP -o log_cli=true -m "ukbiobank" \
               --cov-append \
               --cov-branch \
               --cov-report term-missing \
-              --cov=xcp_d \
-              --data_dir=/src/xcp_d/.circleci/data \
-              --output_dir=/src/xcp_d/.circleci/out \
-              --working_dir=/src/xcp_d/.circleci/work \
-              xcp_d
+              --cov=smripost_linc \
+              --data_dir=/src/smripost_linc/.circleci/data \
+              --output_dir=/src/smripost_linc/.circleci/out \
+              --working_dir=/src/smripost_linc/.circleci/work \
+              smripost_linc
             mkdir /src/coverage
-            mv /src/xcp_d/.coverage /src/coverage/.coverage.ukbiobank
+            mv /src/smripost_linc/.coverage /src/coverage/.coverage.ukbiobank
             # remove nifti files before uploading artifacts
-            find /src/xcp_d/.circleci/out/ -name "*.nii.gz" -type f -delete
+            find /src/smripost_linc/.circleci/out/ -name "*.nii.gz" -type f -delete
       - persist_to_workspace:
           root: /src/coverage/
           paths:
             - .coverage.ukbiobank
       - store_artifacts:
-          path: /src/xcp_d/.circleci/out/test_ukbiobank/
+          path: /src/smripost_linc/.circleci/out/test_ukbiobank/
 
   nibabies:
     <<: *dockersetup
@@ -385,7 +385,7 @@ jobs:
       - run:
           name: Check whether build should be skipped
           command: |
-            cd /src/xcp_d
+            cd /src/smripost_linc
             if [[ "$( git log --format=oneline -n 1 $CIRCLE_SHA1 | grep -i -E '\[skip[ _]?integration\]' )" != "" ]]; then
               echo "Skipping nibabies build"
               circleci step halt
@@ -394,28 +394,28 @@ jobs:
           key: nibabies-04
       - run: *runinstall
       - run:
-          name: Run full xcp_d on nibabies
+          name: Run full smripost_linc on nibabies
           no_output_timeout: 1h
           command: |
             pytest -rP -o log_cli=true -m "nibabies" \
               --cov-append \
               --cov-branch \
               --cov-report term-missing \
-              --cov=xcp_d \
-              --data_dir=/src/xcp_d/.circleci/data \
-              --output_dir=/src/xcp_d/.circleci/out \
-              --working_dir=/src/xcp_d/.circleci/work \
-              xcp_d
+              --cov=smripost_linc \
+              --data_dir=/src/smripost_linc/.circleci/data \
+              --output_dir=/src/smripost_linc/.circleci/out \
+              --working_dir=/src/smripost_linc/.circleci/work \
+              smripost_linc
             mkdir /src/coverage
-            mv /src/xcp_d/.coverage /src/coverage/.coverage.nibabies
+            mv /src/smripost_linc/.coverage /src/coverage/.coverage.nibabies
             # remove nifti files before uploading artifacts
-            find /src/xcp_d/.circleci/out/ -name "*.nii.gz" -type f -delete
+            find /src/smripost_linc/.circleci/out/ -name "*.nii.gz" -type f -delete
       - persist_to_workspace:
           root: /src/coverage/
           paths:
             - .coverage.nibabies
       - store_artifacts:
-          path: /src/xcp_d/.circleci/out/test_nibabies/
+          path: /src/smripost_linc/.circleci/out/test_nibabies/
 
   pnc_cifti:
     <<: *dockersetup
@@ -427,7 +427,7 @@ jobs:
       - run:
           name: Check whether build should be skipped
           command: |
-            cd /src/xcp_d
+            cd /src/smripost_linc
             if [[ "$( git log --format=oneline -n 1 $CIRCLE_SHA1 | grep -i -E '\[skip[ _]?integration\]' )" != "" ]]; then
               echo "Skipping pnc_cifti build"
               circleci step halt
@@ -436,28 +436,28 @@ jobs:
           key: pnc-02
       - run: *runinstall
       - run:
-          name: Run full xcp_d on cifti with freesurfer
+          name: Run full smripost_linc on cifti with freesurfer
           no_output_timeout: 5h
           command: |
             pytest -rP -o log_cli=true -m "pnc_cifti" \
               --cov-append \
               --cov-branch \
               --cov-report term-missing \
-              --cov=xcp_d \
-              --data_dir=/src/xcp_d/.circleci/data \
-              --output_dir=/src/xcp_d/.circleci/out \
-              --working_dir=/src/xcp_d/.circleci/work \
-              xcp_d
+              --cov=smripost_linc \
+              --data_dir=/src/smripost_linc/.circleci/data \
+              --output_dir=/src/smripost_linc/.circleci/out \
+              --working_dir=/src/smripost_linc/.circleci/work \
+              smripost_linc
             mkdir /src/coverage
-            mv /src/xcp_d/.coverage /src/coverage/.coverage.pnc_cifti
+            mv /src/smripost_linc/.coverage /src/coverage/.coverage.pnc_cifti
             # remove nifti files before uploading artifacts
-            find /src/xcp_d/.circleci/out/ -name "*.nii.gz" -type f -delete
+            find /src/smripost_linc/.circleci/out/ -name "*.nii.gz" -type f -delete
       - persist_to_workspace:
           root: /src/coverage
           paths:
             - .coverage.pnc_cifti
       - store_artifacts:
-          path: /src/xcp_d/.circleci/out/test_pnc_cifti/
+          path: /src/smripost_linc/.circleci/out/test_pnc_cifti/
 
   pnc_cifti_t2wonly:
     <<: *dockersetup
@@ -469,7 +469,7 @@ jobs:
       - run:
           name: Check whether build should be skipped
           command: |
-            cd /src/xcp_d
+            cd /src/smripost_linc
             if [[ "$( git log --format=oneline -n 1 $CIRCLE_SHA1 | grep -i -E '\[skip[ _]?integration\]' )" != "" ]]; then
               echo "Skipping pnc_cifti_t2wonly build"
               circleci step halt
@@ -478,28 +478,28 @@ jobs:
           key: pnc-02
       - run: *runinstall
       - run:
-          name: Run full xcp_d on cifti with freesurfer
+          name: Run full smripost_linc on cifti with freesurfer
           no_output_timeout: 5h
           command: |
             pytest -rP -o log_cli=true -m "pnc_cifti_t2wonly" \
               --cov-append \
               --cov-branch \
               --cov-report term-missing \
-              --cov=xcp_d \
-              --data_dir=/src/xcp_d/.circleci/data \
-              --output_dir=/src/xcp_d/.circleci/out \
-              --working_dir=/src/xcp_d/.circleci/work \
-              xcp_d
+              --cov=smripost_linc \
+              --data_dir=/src/smripost_linc/.circleci/data \
+              --output_dir=/src/smripost_linc/.circleci/out \
+              --working_dir=/src/smripost_linc/.circleci/work \
+              smripost_linc
             mkdir /src/coverage
-            mv /src/xcp_d/.coverage /src/coverage/.coverage.pnc_cifti_t2wonly
+            mv /src/smripost_linc/.coverage /src/coverage/.coverage.pnc_cifti_t2wonly
             # remove nifti files before uploading artifacts
-            find /src/xcp_d/.circleci/out/ -name "*.nii.gz" -type f -delete
+            find /src/smripost_linc/.circleci/out/ -name "*.nii.gz" -type f -delete
       - persist_to_workspace:
           root: /src/coverage
           paths:
             - .coverage.pnc_cifti_t2wonly
       - store_artifacts:
-          path: /src/xcp_d/.circleci/out/test_pnc_cifti_t2wonly/
+          path: /src/smripost_linc/.circleci/out/test_pnc_cifti_t2wonly/
 
   pytests:
     <<: *dockersetup
@@ -511,7 +511,7 @@ jobs:
       - run:
           name: Check whether build should be skipped
           command: |
-            cd /src/xcp_d
+            cd /src/smripost_linc
             if [[ "$( git log --format=oneline -n 1 $CIRCLE_SHA1 | grep -i -E '\[skip[ _]?pytests\]' )" != "" ]]; then
               echo "Skipping pytests build"
               circleci step halt
@@ -536,19 +536,19 @@ jobs:
               --cov-append \
               --cov-branch \
               --cov-report term-missing \
-              --cov=xcp_d \
-              --data_dir=/src/xcp_d/.circleci/data \
-              --output_dir=/src/xcp_d/.circleci/out \
-              --working_dir=/src/xcp_d/.circleci/work \
-              xcp_d
+              --cov=smripost_linc \
+              --data_dir=/src/smripost_linc/.circleci/data \
+              --output_dir=/src/smripost_linc/.circleci/out \
+              --working_dir=/src/smripost_linc/.circleci/work \
+              smripost_linc
             mkdir /src/coverage
-            mv /src/xcp_d/.coverage /src/coverage/.coverage.pytests
+            mv /src/smripost_linc/.coverage /src/coverage/.coverage.pytests
       - persist_to_workspace:
           root: /src/coverage
           paths:
             - .coverage.pytests
       - store_artifacts:
-          path: /src/xcp_d/.circleci/out
+          path: /src/smripost_linc/.circleci/out
 
   merge_coverage:
     <<: *dockersetup
@@ -590,14 +590,14 @@ jobs:
           no_output_timeout: 3h
           command: |
             # Get version, update files.
-            THISVERSION=$(python3 -c "from xcp_d import __version__; print(__version__)")
-            sed -i "s/title = {xcp_d}/title = {xcp_d ${CIRCLE_TAG:-$THISVERSION}}/" xcp_d/data/boilerplate.bib
+            THISVERSION=$(python3 -c "from smripost_linc import __version__; print(__version__)")
+            sed -i "s/title = {smripost_linc}/title = {smripost_linc ${CIRCLE_TAG:-$THISVERSION}}/" smripost_linc/data/boilerplate.bib
             # Build docker image
             e=1 && for i in {1..5}; do
               docker build \
-                --cache-from=pennlinc/xcp_d \
+                --cache-from=pennlinc/smripost_linc \
                 --rm=false \
-                -t pennlinc/xcp_d:latest \
+                -t pennlinc/smripost_linc:latest \
                 --build-arg BUILD_DATE=`date -u +"%Y-%m-%dT%H:%M:%SZ"` \
                 --build-arg VCS_REF=`git rev-parse --short HEAD` \
                 --build-arg VERSION="${CIRCLE_TAG:-$THISVERSION}" . \
@@ -609,12 +609,12 @@ jobs:
           command: |
             if [[ -n "$DOCKERHUB_TOKEN" ]]; then
               docker login -u $DOCKERHUB_USERNAME -p $DOCKERHUB_TOKEN
-              docker tag pennlinc/xcp_d pennlinc/xcp_d:unstable
-              docker push pennlinc/xcp_d:unstable
+              docker tag pennlinc/smripost_linc pennlinc/smripost_linc:unstable
+              docker push pennlinc/smripost_linc:unstable
               if [[ -n "$CIRCLE_TAG" ]]; then
-                docker push pennlinc/xcp_d:latest
-                docker tag pennlinc/xcp_d pennlinc/xcp_d:$CIRCLE_TAG
-                docker push pennlinc/xcp_d:$CIRCLE_TAG
+                docker push pennlinc/smripost_linc:latest
+                docker tag pennlinc/smripost_linc pennlinc/smripost_linc:$CIRCLE_TAG
+                docker push pennlinc/smripost_linc:$CIRCLE_TAG
               fi
             fi
 
