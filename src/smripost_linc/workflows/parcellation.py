@@ -148,10 +148,13 @@ def init_load_atlases_wf(name='load_atlases_wf'):
     atlas_files
     atlas_labels_files
     """
+    from neuromaps import transforms
+
     from smripost_linc.interfaces.bids import DerivativesDataSink
+    from smripost_linc.interfaces.misc import CiftiSeparateMetric
     from smripost_linc.utils.bids import collect_atlases
     from smripost_linc.utils.boilerplate import describe_atlases
-    from smripost_linc.utils.parcellation import gifti_to_annot
+    from smripost_linc.utils.parcellation import convert_gifti_to_annot
 
     workflow = Workflow(name=name)
     output_dir = config.execution.output_dir
@@ -205,7 +208,8 @@ The following atlases were used in the workflow: {atlas_str}.
         niu.IdentityInterface(
             fields=[
                 'atlas_names',
-                'atlas_files',
+                'lh_atlas_annots',
+                'rh_atlas_annots',
                 'atlas_labels_files',
             ],
         ),
@@ -230,40 +234,73 @@ The following atlases were used in the workflow: {atlas_str}.
         if info['format'] == 'gifti':
             gifti_buffer.inputs.lh_gifti = info['image'][0]
             gifti_buffer.inputs.rh_gifti = info['image'][1]
+
         elif info['format'] == 'cifti':
             # Split CIFTI into GIFTIs
-            ...
-        else:
+            lh_cifti_to_gifti = pe.Node(
+                CiftiSeparateMetric(
+                    in_file=info['image'],
+                    metric='CORTEX_LEFT',
+                    direction='COLUMN',
+                    num_threads=config.nipype.omp_nthreads,
+                ),
+                name=f'lh_cifti_to_gifti_{atlas}',
+                n_procs=config.nipype.omp_nthreads,
+            )
+            rh_cifti_to_gifti = pe.Node(
+                CiftiSeparateMetric(
+                    in_file=info['image'],
+                    metric='CORTEX_RIGHT',
+                    direction='COLUMN',
+                    num_threads=config.nipype.omp_nthreads,
+                ),
+                name=f'rh_cifti_to_gifti_{atlas}',
+                n_procs=config.nipype.omp_nthreads,
+            )
+            workflow.connect([
+                (lh_cifti_to_gifti, gifti_buffer, [('out_file', 'lh_gifti')]),
+                (rh_cifti_to_gifti, gifti_buffer, [('out_file', 'rh_gifti')]),
+            ])  # fmt:skip
+
+        elif info['format'] == 'nifti' and info['space'] == 'MNI152NLin6Asym':
             # Convert NIfTI to GIFTI
-            ...
+            nifti_to_gifti = pe.Node(
+                niu.Function(
+                    function=transforms.mni152_to_fsaverage,
+                    output_names=['lh_gifti', 'rh_gifti'],
+                ),
+                name=f'nifti_to_gifti_{atlas}',
+            )
+            nifti_to_gifti.inputs.img = info['image']
+            nifti_to_gifti.inputs.fsavg_density = '164k'
+            nifti_to_gifti.inputs.method = 'nearest'
+
+            workflow.connect([
+                (nifti_to_gifti, gifti_buffer, [
+                    ('lh_gifti', 'lh_gifti'),
+                    ('rh_gifti', 'rh_gifti'),
+                ]),
+            ])  # fmt:skip
+
+            # The space is now fsaverage
+            info['space'] = 'fsaverage'
+
+        elif info['format'] == 'nifti':
+            raise NotImplementedError(
+                f'Unsupported format ({info["format"]}) and space ({info["space"]}) combination.'
+            )
 
         for hemi in ['L', 'R']:
             annot_node = lh_annots if hemi == 'L' else rh_annots
-            selecter = select_first if hemi == 'L' else select_second
+
             # Identify space and file-type of the atlas
-            if info['space'] == 'MNI152NLin6Asym' and info['format'] == 'nifti':
-                # Convert MNI152NLin6Asym to annot
-                create_annot = pe.Node(
-                    niu.Function(
-                        function=create_annots,
-                    ),
-                    name=f'create_annot_{atlas}',
-                )
-                create_annot.inputs.atlas = atlas
-
-                # Warp fsaverage-annot to fsnative-annot
-                ...
-
-            elif info['format'] == 'nifti':
-                raise NotImplementedError('Only MNI152NLin6Asym NIfTI atlases are supported.')
-
-            elif info['space'] == 'fsLR':
+            if info['space'] == 'fsLR':
                 # Warp atlas from fsLR to fsaverage
                 warp_fslr_to_fsaverage = pe.Node(
                     niu.Function(
                         function=fslr_to_fsaverage,
                     ),
-                    name=f'warp_fslr_to_fsaverage_{atlas}',
+                    name=f'warp_fslr_to_fsaverage_{atlas}_{hemi}',
                 )
                 warp_fslr_to_fsaverage.inputs.target_density = '164k'
                 warp_fslr_to_fsaverage.inputs.hemi = hemi
@@ -273,42 +310,32 @@ The following atlases were used in the workflow: {atlas_str}.
                 ])  # fmt:skip
 
                 # Convert fsaverage to annot
-                ...
-
-                # Warp fsaverage-annot to fsnative-annot
-                ...
-
-            elif info['space'] == 'fsaverage':
-                # Convert fsaverage to annot
-                create_annot = pe.Node(
+                gifti_to_annot = pe.Node(
                     niu.Function(
-                        function=create_annots,
+                        function=convert_gifti_to_annot,
                     ),
-                    name=f'create_annot_{atlas}',
+                    name=f'gifti_to_annot_{atlas}_{hemi}',
                 )
-                create_annot.inputs.atlas = atlas
-
-                # Warp fsaverage-annot to fsnative-annot
-                ...
-
-                # Write out fsnative-annot files
                 workflow.connect([
-                    (create_annot, annot_node, [(('annot', selecter), f'in{i_atlas + 1}')]),
+                    (warp_fslr_to_fsaverage, gifti_to_annot, [('out', 'in_file')]),
+                    (gifti_to_annot, annot_node, [('out', f'in{i_atlas + 1}')]),
+                ])  # fmt:skip
+
+            elif info['format'] == 'gifti' and info['space'] == 'fsaverage':
+                # Convert fsaverage to annot
+                gifti_to_annot = pe.Node(
+                    niu.Function(
+                        function=convert_gifti_to_annot,
+                    ),
+                    name=f'gifti_to_annot_{atlas}_{hemi}',
+                )
+                workflow.connect([
+                    (gifti_buffer, gifti_to_annot, [(f'{hemi.lower()}_gifti', 'in_file')]),
+                    (gifti_to_annot, annot_node, [('out', f'in{i_atlas + 1}')]),
                 ])  # fmt:skip
 
             elif info['space'] == 'fsnative' and info['format'] == 'annot':
-                # Write out fsnative-annot files
-                workflow.connect([
-                    (inputnode, annot_node, [(('atlas_file', selecter), f'in{i_atlas + 1}')]),
-                ])  # fmt:skip
-
-            if info['format'] != 'annot':
-                convert_gifti_to_annot = pe.Node(
-                    niu.Function(
-                        function=gifti_to_annot,
-                    ),
-                    name=f'convert_gifti_to_annot_{atlas}_{hemi}',
-                )
+                raise Exception()
 
     atlas_srcs = pe.MapNode(
         BIDSURI(
@@ -322,21 +349,38 @@ The following atlases were used in the workflow: {atlas_str}.
     )
     workflow.connect([(inputnode, atlas_srcs, [('atlas_files', 'in1')])])
 
-    copy_atlas = pe.MapNode(
+    ds_atlas_lh = pe.MapNode(
         DerivativesDataSink(),
-        name='copy_atlas',
+        name='ds_atlas_lh',
         iterfield=['in_file', 'atlas', 'meta_dict', 'Sources'],
         run_without_submitting=True,
     )
     workflow.connect([
-        (inputnode, copy_atlas, [
+        (inputnode, ds_atlas_lh, [
             ('name_source', 'name_source'),
             ('atlas_names', 'atlas'),
-            ('atlas_files', 'in_file'),
             ('atlas_metadata', 'meta_dict'),
         ]),
-        (atlas_srcs, copy_atlas, [('out', 'Sources')]),
-        (copy_atlas, outputnode, [('out_file', 'atlas_files')]),
+        (lh_annots, ds_atlas_lh, [('out', 'in_file')]),
+        (atlas_srcs, ds_atlas_lh, [('out', 'Sources')]),
+        (ds_atlas_lh, outputnode, [('out_file', 'lh_atlas_annots')]),
+    ])  # fmt:skip
+
+    ds_atlas_rh = pe.MapNode(
+        DerivativesDataSink(),
+        name='ds_atlas_rh',
+        iterfield=['in_file', 'atlas', 'meta_dict', 'Sources'],
+        run_without_submitting=True,
+    )
+    workflow.connect([
+        (inputnode, ds_atlas_rh, [
+            ('name_source', 'name_source'),
+            ('atlas_names', 'atlas'),
+            ('atlas_metadata', 'meta_dict'),
+        ]),
+        (lh_annots, ds_atlas_rh, [('out', 'in_file')]),
+        (atlas_srcs, ds_atlas_rh, [('out', 'Sources')]),
+        (ds_atlas_rh, outputnode, [('out_file', 'rh_atlas_annots')]),
     ])  # fmt:skip
 
     copy_atlas_labels_file = pe.MapNode(

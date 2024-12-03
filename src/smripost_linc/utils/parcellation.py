@@ -1,7 +1,7 @@
 """Utility functions for parcellation."""
 
 
-def gifti_to_annot(gifti, atlas, hemi, labels_file):
+def convert_gifti_to_annot(gifti, atlas, hemi, labels_file):
     """Create .annot files from a nifti file and a json file."""
     import os
 
