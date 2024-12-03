@@ -36,7 +36,6 @@ class FreesurferFiles(SimpleInterface):
     output_spec = _FreesurferFilesOutputSpec
 
     def _run_interface(self, runtime):
-        freesurfer_dir = self.inputs.freesurfer_dir
         ...
 
         return runtime
@@ -68,7 +67,6 @@ class FreesurferAnnots(SimpleInterface):
     output_spec = _FreesurferAnnotsOutputSpec
 
     def _run_interface(self, runtime):
-        freesurfer_dir = self.inputs.freesurfer_dir
         ...
 
         return runtime
