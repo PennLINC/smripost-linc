@@ -1,0 +1,44 @@
+{
+  "title": "sMRIPost-LINC: a robust preprocessing pipeline for functional MRI",
+  "description": "<p>sMRIPost-LINC is a robust and easy-to-use pipeline for running ICA-AROMA on preprocessed fMRI data organized in BIDS format.</p>",
+  "contributors": [],
+  "creators": [
+    {
+      "affiliation": "University of Pennsylvania",
+      "name": "Salo, Taylor",
+      "orcid": "0000-0001-9813-3167"
+    },
+    {
+      "affiliation": "University of Pennsylvania",
+      "name": "Cieslak, Matthew",
+      "orcid": "0000-0002-1931-4734"
+    },
+    {
+      "affiliation": "University of Pennsylvania",
+      "name": "Satterthwaite, Theodore",
+      "orcid": "0000-0001-7072-9399"
+    }
+  ],
+  "keywords": [
+    "neuroimaging",
+    "workflow",
+    "pipeline",
+    "postprocessing",
+    "sMRI",
+    "BIDS"
+  ],
+  "license": "Apache-2.0",
+  "related_identifiers": [
+    {
+      "identifier": "https://smripost_linc.org",
+      "relation": "documents",
+      "scheme": "url"
+    },
+    {
+      "identifier": "10.1038/s41592-018-0235-4",
+      "relation": "isPartOf",
+      "scheme": "doi"
+    }
+  ],
+  "upload_type": "software"
+}
