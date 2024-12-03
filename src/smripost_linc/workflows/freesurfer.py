@@ -7,17 +7,45 @@ from nipype.pipeline import engine as pe
 from niworkflows.engine.workflows import LiterateWorkflow as Workflow
 
 
-def init_postprocess_freesurfer_wf(
-    anat_file,
-    freesurfer_dir,
-    metadata,
-    name='postprocess_freesurfer_wf',
+def init_parcellate_external_wf(
+    atlases,
+    mem_gb,
+    name='parcellate_external_wf',
 ):
-    """Post-process FreeSurfer outputs.
+    """Parcellate external atlases provided as fsnative-space annot files.
 
-    1. Collect Freesurfer outputs to parcellate.
-    2. Collect necessary transforms to warp atlases to fsnative annot files.
+    Workflow Graph
+        .. workflow::
+            :graph2use: orig
+            :simple_form: yes
+
+            from smripost_linc.tests.tests import mock_config
+            from smripost_linc import config
+            from smripost_linc.workflows.freesurfer import init_parcellate_external_wf
+
+            with mock_config():
+                wf = init_parcellate_external_wf(mem_gb={'resampled': 2})
+
+    Parameters
+    ----------
+    mem_gb : :obj:`dict`
+        Dictionary of memory allocations.
+    name : :obj:`str`
+        Workflow name.
+        Default is 'parcellate_external_wf'.
+
+    Inputs
+    ------
+    lh_fsnative_annots
+    rh_fsnative_annots
+
+    Outputs
+    -------
+    parcellated_tsvs
+        Parcellated TSV files. One for each atlas and hemisphere.
     """
+    print(atlases)
+    print(mem_gb)
 
     workflow = Workflow(name=name)
 
@@ -25,63 +53,30 @@ def init_postprocess_freesurfer_wf(
         niu.IdentityInterface(
             fields=[
                 'freesurfer_dir',
+                'lh_fsnative_annots',
+                'rh_fsnative_annots',
             ],
         ),
         name='inputnode',
     )
 
-    copy_freesurfer_files = pe.Node(
-        niu.Function(
-            input_names=['freesurfer_dir', 'output_dir'],
-            output_names=['output_dir'],
-            function=symlink_freesurfer_dir,
+    outputnode = pe.Node(
+        niu.IdentityInterface(
+            fields=[
+                'parcellated_tsvs',
+            ],
         ),
-        name='copy_freesurfer_files',
+        name='outputnode',
     )
-    workflow.connect([(inputnode, copy_freesurfer_files, [('freesurfer_dir', 'freesurfer_dir')])])
+    workflow.add_nodes([inputnode, outputnode])
+
+    # Select Freesurfer files to parcellate
+
+    # Parcellate each data file with each atlas in each hemisphere
+
+    # Convert parcellated data to TSV
+
+    # Write out parcellated data
+    ...
 
     return workflow
-
-
-def symlink_freesurfer_dir(freesurfer_dir, output_dir=None):
-    """Symlink the FreeSurfer directory to the output directory.
-
-    Folders will be created in the output directory if they do not exist,
-    while files will be symlinked.
-
-    Parameters
-    ----------
-    freesurfer_dir : str
-        Path to the FreeSurfer directory.
-    output_dir : str or None
-        Path to the output directory. If None, the current working directory
-        will be used.
-
-    Returns
-    -------
-    str
-        Path to the output directory.
-    """
-    import os
-    from pathlib import Path
-
-    if output_dir is None:
-        output_dir = os.getcwd()
-
-    freesurfer_dir = Path(freesurfer_dir).resolve()
-    output_dir = Path(output_dir).resolve()
-
-    if not output_dir.exists():
-        output_dir.mkdir(parents=True)
-
-    for root, _, files in os.walk(freesurfer_dir):
-        output_sub_dir = output_dir / Path(root).relative_to(freesurfer_dir)
-        output_sub_dir.mkdir(exist_ok=True)
-
-        for file_ in files:
-            os.symlink(
-                Path(root) / file_,
-                output_sub_dir / file_,
-            )
-
-    return str(output_dir)

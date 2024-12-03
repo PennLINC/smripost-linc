@@ -83,6 +83,24 @@
                 "desc": null,
                 "suffix": "xfm",
                 "extension": ".h5"
+            },
+            "lh_fsnative2fsaverage": {
+                "datatype": "anat",
+                "run": null,
+                "hemi": "L",
+                "space": "fsaverage",
+                "desc": "reg",
+                "suffix": "sphere",
+                "extension": ".surf.gii"
+            },
+            "rh_fsnative2fsaverage": {
+                "datatype": "anat",
+                "run": null,
+                "hemi": "R",
+                "space": "fsaverage",
+                "desc": "reg",
+                "suffix": "sphere",
+                "extension": ".surf.gii"
             }
         }
     },
@@ -112,6 +130,7 @@
     "default_path_patterns": [
         "atlases/atlas-{atlas}/atlas-{atlas}[_space-{space}][_cohort-{cohort}][_res-{res}][_desc-{desc}]_{suffix<dseg>}{extension<.nii|.nii.gz|.tsv|.json>|.nii.gz}",
         "atlases/atlas-{atlas}/atlas-{atlas}[_space-{space}][_cohort-{cohort}][_den-{den}][_desc-{desc}]_{suffix<dseg>}{extension<.dlabel.nii|.tsv|.json>|.dlabel.nii}",
+        "atlases/atlas-{atlas}/atlas-{atlas}_hemi-{hemi<L|R>}[_space-{space}][_cohort-{cohort}][_den-{den}][_desc-{desc}]_{suffix<dseg>}{extension<.annot|.tsv|.json>|.annot}",
         "sub-{subject}[/ses-{session}]/{datatype<anat>|anat}/sub-{subject}[_ses-{session}][_acq-{acquisition}][_ce-{ceagent}][_rec-{reconstruction}][_run-{run}][_space-{space}][_cohort-{cohort}][_seg-{segmentation}][_res-{res}][_desc-{desc}]_{suffix<T1w|T2w|T1map|T2map>}{extension<.nii|.nii.gz|.json>|.nii.gz}",
         "sub-{subject}[/ses-{session}]/{datatype<anat>|anat}/sub-{subject}[_ses-{session}][_acq-{acquisition}][_ce-{ceagent}][_rec-{reconstruction}][_run-{run}]_from-{from}_to-{to}_mode-{mode<image|points>|image}_{suffix<xfm>|xfm}{extension<.txt|.h5>}",
         "sub-{subject}[/ses-{session}]/{datatype<anat>|anat}/sub-{subject}[_ses-{session}][_acq-{acquisition}][_ce-{ceagent}][_rec-{reconstruction}][_run-{run}]_hemi-{hemi<L|R>}[_space-{space}][_cohort-{cohort}][_seg-{segmentation}][_den-{den}][_desc-{desc}]_{suffix<white|pial|midthickness|inflated|vinflated|sphere|flat>}{extension<.surf.gii|.json>|.surf.gii}",

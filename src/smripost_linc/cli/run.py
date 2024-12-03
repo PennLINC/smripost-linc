@@ -20,7 +20,7 @@
 #
 #     https://www.pennlinc.org/community/licensing/
 #
-"""fMRI preprocessing workflow."""
+"""sMRI postprocessing workflow."""
 
 from smripost_linc import config
 
