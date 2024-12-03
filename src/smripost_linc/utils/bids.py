@@ -327,8 +327,8 @@ def collect_atlases(datasets, atlases, bids_filters=None):
 
             atlas_metadata = None
             if atlas_metadata_file:
-                with open(atlas_metadata_file) as fo:
-                    atlas_metadata = json.load(fo)
+                with open(atlas_metadata_file) as f_obj:
+                    atlas_metadata = json.load(f_obj)
 
             atlas_file = layout.get_file(atlas_image)
             extension = atlas_file.entities['extension']
