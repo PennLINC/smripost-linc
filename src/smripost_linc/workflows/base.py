@@ -63,10 +63,14 @@ def init_smripost_linc_wf():
     """
     from niworkflows.engine.workflows import LiterateWorkflow as Workflow
 
+    from smripost_linc.workflows.parcellation import init_load_atlases_wf
+
     ver = Version(config.environment.version)
 
     smripost_linc_wf = Workflow(name=f'smripost_linc_{ver.major}_{ver.minor}_wf')
     smripost_linc_wf.base_dir = config.execution.work_dir
+
+    load_atlases_wf = init_load_atlases_wf()
 
     for subject_id in config.execution.participant_label:
         single_subject_wf = init_single_subject_wf(subject_id)
@@ -77,7 +81,14 @@ def init_smripost_linc_wf():
         for node in single_subject_wf._get_all_nodes():
             node.config = deepcopy(single_subject_wf.config)
 
-        smripost_linc_wf.add_nodes([single_subject_wf])
+        smripost_linc_wf.connect([
+            (load_atlases_wf, single_subject_wf, [
+                ('outputnode.atlas_names', 'inputnode.atlas_names'),
+                ('outputnode.lh_atlas_annots', 'inputnode.lh_atlas_annots'),
+                ('outputnode.rh_atlas_annots', 'inputnode.rh_atlas_annots'),
+                ('outputnode.atlas_labels_files', 'inputnode.atlas_labels_files'),
+            ]),
+        ])  # fmt:skip
 
         # Dump a copy of the config file into the log directory
         log_dir = (
@@ -120,6 +131,7 @@ def init_single_subject_wf(subject_id: str):
     5.  Extract Euler number from recon-all.log.
     """
     from bids.utils import listify
+    from nipype.interfaces import utility as niu
     from niworkflows.engine.workflows import LiterateWorkflow as Workflow
     from niworkflows.interfaces.bids import BIDSInfo
     from niworkflows.interfaces.nilearn import NILEARN_VERSION
@@ -187,6 +199,19 @@ It is released under the [CC0]\
         f'Collected subject data:\n{yaml.dump(subject_data, default_flow_style=False, indent=4)}',
     )
 
+    inputnode = pe.Node(
+        niu.IdentityInterface(
+            fields=[
+                'atlas_names',
+                'lh_atlas_annots',
+                'rh_atlas_annots',
+                'atlas_labels_files',
+            ],
+        ),
+        name='inputnode',
+        run_without_submitting=True,
+    )
+
     bids_info = pe.Node(
         BIDSInfo(
             bids_dir=config.execution.bids_dir,
@@ -239,7 +264,14 @@ It is released under the [CC0]\
 
     for anat_file in subject_data['anat']:
         single_run_wf = init_single_run_wf(anat_file)
-        workflow.add_nodes([single_run_wf])
+        workflow.connect([
+            (inputnode, single_run_wf, [
+                ('atlas_names', 'inputnode.atlas_names'),
+                ('lh_atlas_annots', 'inputnode.lh_atlas_annots'),
+                ('rh_atlas_annots', 'inputnode.rh_atlas_annots'),
+                ('atlas_labels_files', 'inputnode.atlas_labels_files'),
+            ]),
+        ])  # fmt:skip
 
     return clean_datasinks(workflow)
 
@@ -251,12 +283,13 @@ def init_single_run_wf(anat_file):
     preprocessed anatomical image.
     """
     from fmriprep.utils.misc import estimate_bold_mem_usage
+    from nipype.interfaces import utility as niu
+    from nipype.pipeline import engine as pe
     from niworkflows.engine.workflows import LiterateWorkflow as Workflow
 
     from smripost_linc.utils.bids import collect_derivatives, extract_entities
     from smripost_linc.utils.freesurfer import find_fs_path
     from smripost_linc.workflows.freesurfer import init_postprocess_freesurfer_wf
-    from smripost_linc.workflows.outputs import init_anat_fit_reports_wf
 
     spaces = config.workflow.spaces
 
@@ -327,8 +360,18 @@ def init_single_run_wf(anat_file):
         ),
     )
 
-    # Warp external atlases (fsLR or fsaverage space) to fsnative-space annot files
-
+    inputnode = pe.Node(
+        niu.IdentityInterface(
+            fields=[
+                'atlas_names',
+                'lh_atlas_annots',
+                'rh_atlas_annots',
+                'atlas_labels_files',
+            ],
+        ),
+        name='inputnode',
+        run_without_submitting=True,
+    )
 
     # Run single-run processing
     postprocess_freesurfer_wf = init_postprocess_freesurfer_wf(
@@ -337,12 +380,14 @@ def init_single_run_wf(anat_file):
         metadata=anat_metadata,
         mem_gb=mem_gb,
     )
-
-    # Generate reportlets
-    anat_fit_reports_wf = init_anat_fit_reports_wf(output_dir=config.execution.output_dir)
-    anat_fit_reports_wf.inputs.inputnode.source_file = anat_file
-    anat_fit_reports_wf.inputs.inputnode.anat2std_xfm = anatomical_cache['anat2mni152nlin6asym']
-    anat_fit_reports_wf.inputs.inputnode.anat_dseg = anatomical_cache['anat_dseg']
+    workflow.connect([
+        (inputnode, postprocess_freesurfer_wf, [
+            ('atlas_names', 'inputnode.atlas_names'),
+            ('lh_atlas_annots', 'inputnode.lh_atlas_annots'),
+            ('rh_atlas_annots', 'inputnode.rh_atlas_annots'),
+            ('atlas_labels_files', 'inputnode.atlas_labels_files'),
+        ]),
+    ])  # fmt:skip
 
     # Fill-in datasinks seen so far
     for node in workflow.list_node_names():
