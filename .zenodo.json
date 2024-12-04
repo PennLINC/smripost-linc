@@ -33,11 +33,6 @@
       "identifier": "https://smripost_linc.org",
       "relation": "documents",
       "scheme": "url"
-    },
-    {
-      "identifier": "10.1038/s41592-018-0235-4",
-      "relation": "isPartOf",
-      "scheme": "doi"
     }
   ],
   "upload_type": "software"

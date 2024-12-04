@@ -405,6 +405,8 @@ def init_single_run_wf(anat_file, atlases):
         ]),
     ])  # fmt:skip
 
+    # Calculate myelin map if both T1w and T2w are available
+
     # Fill-in datasinks seen so far
     for node in workflow.list_node_names():
         node_name = node.split('.')[-1]
