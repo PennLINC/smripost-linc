@@ -120,3 +120,54 @@ class CopyAnnots(SimpleInterface):
         shutil.copyfile(self.inputs.in_file, out_file)
 
         return runtime
+
+
+class _CollectFSAverageSurfacesInputSpec(TraitedSpec):
+    freesurfer_dir = Directory(
+        exists=True,
+        mandatory=True,
+        desc='FreeSurfer directory',
+    )
+    subject_id = traits.Str(
+        mandatory=True,
+        desc='FreeSurfer subject ID',
+    )
+    in_file = File(
+        exists=True,
+        mandatory=True,
+        desc='Input annotation file',
+    )
+    hemisphere = traits.Enum(
+        'lh',
+        'rh',
+        desc='Hemisphere to copy annotation file to',
+        usedefault=True,
+    )
+    atlas = traits.Str(
+        desc='Atlas to used in annotation file name',
+    )
+
+
+class _CollectFSAverageSurfacesOutputSpec(TraitedSpec):
+    out_file = File(
+        exists=True,
+        desc='Output annotation file',
+    )
+
+
+class CollectFSAverageSurfaces(SimpleInterface):
+    input_spec = _CollectFSAverageSurfacesInputSpec
+    output_spec = _CollectFSAverageSurfacesOutputSpec
+
+    def _run_interface(self, runtime):
+        out_file = os.path.join(
+            self.inputs.freesurfer_dir,
+            self.inputs.subject_id,
+            'label',
+            f'{self.inputs.hemisphere}.{self.inputs.atlas}.annot',
+        )
+        self._results['out_file'] = out_file
+
+        shutil.copyfile(self.inputs.in_file, out_file)
+
+        return runtime

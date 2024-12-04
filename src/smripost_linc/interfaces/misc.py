@@ -1,4 +1,6 @@
-"""Miscellaneous interfaces for fmriprep-aroma."""
+"""Miscellaneous interfaces for sMRIPost-LINC."""
+
+import os
 
 import numpy as np
 from nipype.interfaces.base import (
@@ -16,6 +18,8 @@ from niworkflows.interfaces.fixes import (
     FixHeaderApplyTransforms,
     _FixTraitApplyTransformsInputSpec,
 )
+
+from smripost_linc.utils.utils import split_filename
 
 
 class _ApplyTransformsInputSpec(_FixTraitApplyTransformsInputSpec):
@@ -154,6 +158,98 @@ class CiftiSeparateMetric(WBCommand):
     input_spec = _CiftiSeparateMetricInputSpec
     output_spec = _CiftiSeparateMetricOutputSpec
     _cmd = 'wb_command  -cifti-separate'
+
+
+class _CiftiCreateDenseScalarInputSpec(_WBCommandInputSpec):
+    """Input specification for the CiftiSeparateVolumeAll command."""
+
+    out_file = File(
+        exists=False,
+        mandatory=False,
+        genfile=True,
+        argstr='%s',
+        position=0,
+        desc='The CIFTI output.',
+    )
+    left_metric = File(
+        exists=True,
+        mandatory=False,
+        argstr='-left-metric %s',
+        position=1,
+        desc='The input surface data from the left hemisphere.',
+    )
+    right_metric = File(
+        exists=True,
+        mandatory=False,
+        argstr='-right-metric %s',
+        position=2,
+        desc='The input surface data from the right hemisphere.',
+    )
+    volume_data = File(
+        exists=True,
+        mandatory=False,
+        argstr='-volume %s',
+        position=3,
+        desc='The input volumetric data.',
+    )
+    structure_label_volume = File(
+        exists=True,
+        mandatory=False,
+        argstr='%s',
+        position=4,
+        desc='A label file indicating the structure of each voxel in volume_data.',
+    )
+
+
+class _CiftiCreateDenseScalarOutputSpec(TraitedSpec):
+    """Output specification for the CiftiCreateDenseScalar command."""
+
+    out_file = File(exists=True, desc='output CIFTI file')
+
+
+class CiftiCreateDenseScalar(WBCommand):
+    """Extract volumetric data from CIFTI file (.dtseries).
+
+    Other structures can also be extracted.
+    The input cifti file must have a brain models mapping on the chosen
+    dimension, columns for .dtseries,
+
+    Examples
+    --------
+    >>> cifticreatedensescalar = CiftiCreateDenseScalar()
+    >>> cifticreatedensescalar.inputs.out_file = 'sub_01_task-rest.dscalar.nii'
+    >>> cifticreatedensescalar.inputs.left_metric = 'sub_01_task-rest_hemi-L.func.gii'
+    >>> cifticreatedensescalar.inputs.left_metric = 'sub_01_task-rest_hemi-R.func.gii'
+    >>> cifticreatedensescalar.inputs.volume_data = 'sub_01_task-rest_subcortical.nii.gz'
+    >>> cifticreatedensescalar.inputs.structure_label_volume = 'sub_01_task-rest_labels.nii.gz'
+    >>> cifticreatedensescalar.cmdline
+    wb_command -cifti-create-dense-scalar 'sub_01_task-rest.dscalar.nii' \
+        -left-metric 'sub_01_task-rest_hemi-L.func.gii' \
+        -right-metric 'sub_01_task-rest_hemi-R.func.gii' \
+        -volume-data 'sub_01_task-rest_subcortical.nii.gz' 'sub_01_task-rest_labels.nii.gz'
+    """
+
+    input_spec = _CiftiCreateDenseScalarInputSpec
+    output_spec = _CiftiCreateDenseScalarOutputSpec
+    _cmd = 'wb_command -cifti-create-dense-scalar'
+
+    def _gen_filename(self, name):
+        if name != 'out_file':
+            return None
+
+        if isdefined(self.inputs.out_file):
+            return self.inputs.out_file
+        elif isdefined(self.inputs.volume_data):
+            _, fname, _ = split_filename(self.inputs.volume_data)
+        else:
+            _, fname, _ = split_filename(self.inputs.left_metric)
+
+        return f'{fname}_converted.dscalar.nii'
+
+    def _list_outputs(self):
+        outputs = self.output_spec().get()
+        outputs['out_file'] = os.path.abspath(self._gen_filename('out_file'))
+        return outputs
 
 
 class _ParcellationStats2TSVInputSpec(DynamicTraitedSpec):
