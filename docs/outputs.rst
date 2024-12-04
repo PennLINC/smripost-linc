@@ -2,9 +2,9 @@
 
 .. _outputs:
 
----------------------------
+##########################
 Outputs of *sMRIPost-LINC*
----------------------------
+##########################
 
 *sMRIPost-LINC* outputs conform to the :abbr:`BIDS (brain imaging data structure)`
 Derivatives specification (see `BIDS Derivatives`_, along with the
@@ -16,19 +16,20 @@ upcoming `BEP 011`_ and `BEP 012`_).
     that allows the user a thorough visual assessment of the quality
     of processing and ensures the transparency of *sMRIPost-LINC* operation.
 
-2.  **ICA outputs**:
-    Outputs from the independent component analysis (ICA).
-    For example, the mixing matrix and component weight maps.
+2.  **Atlases**:
+    Atlases selected by the user are warped to fsaverage space and converted to
+    Freesurfer ``.annot`` format.
 
-3.  **Derivatives (denoised data)**:
-    Denoised fMRI data in the requested output spaces and resolutions.
+3.  **Parcellated structural measures**:
+    Anatomical measures are summarized by region of interest (ROI) from each of the atlases.
 
 4.  **Confounds**:
-    Time series of ICA components classified as noise.
+    Some confound values, including Euler numbers, are saved in a TSV file.
 
 
+******
 Layout
-------
+******
 
 Assuming sMRIPost-LINC is invoked with::
 
@@ -38,6 +39,7 @@ The outputs will be a `BIDS Derivatives`_ dataset of the form::
 
     <output_dir>/
       logs/
+      atlases/
       sub-<label>/
       sub-<label>.html
       dataset_description.json
@@ -51,85 +53,78 @@ The log directory contains `citation boilerplate`_ text.
 records metadata recommended by the BIDS standard.
 
 
+**************
 Visual Reports
---------------
+**************
 
 *sMRIPost-LINC* outputs summary reports,
 written to ``<output dir>/smripost_linc/sub-<label>.html``.
 These reports provide a quick way to make visual inspection of the results easy.
 
 
-Derivatives of *sMRIPost-LINC* (denoised data)
------------------------------------------------
+*************************
+Parcellations and Atlases
+*************************
 
-Derivative data are written to
-``<output dir>/sub-<label>/``.
-The `BIDS Derivatives`_ specification describes the naming and metadata conventions we follow.
+*XCP-D* produces parcellated anatomical and functional outputs using a series of atlases.
+The individual outputs are documented in the relevant sections of this document,
+with this section describing the atlases themselves.
+
+The atlases currently used in *XCP-D* can be separated into three groups: subcortical, cortical,
+and combined cortical/subcortical.
+The two subcortical atlases are the Tian atlas :footcite:p:`tian2020topographic` and the
+CIFTI subcortical parcellation :footcite:p:`glasser2013minimal`.
+The cortical atlases are the Glasser :footcite:p:`Glasser_2016`, the
+Gordon :footcite:p:`Gordon_2014`,
+the MIDB precision brain atlas derived from ABCD data and thresholded at 75% probability
+:footcite:p:`hermosillo2022precision`,
+and the Myers-Labonte infant atlas thresholded at 50% probability :footcite:`myers2023functional`.
+The combined cortical/subcortical atlases are 10 different resolutions of the
+4S (Schaefer Supplemented with Subcortical Structures) atlas.
+
+The 4S atlas combines the Schaefer 2018 cortical atlas (version v0143) :footcite:p:`Schaefer_2017`
+at 10 different resolutions (100, 200, 300, 400, 500, 600, 700, 800, 900, and 1000 parcels) with
+the CIT168 subcortical atlas :footcite:p:`pauli2018high`,
+the Diedrichson cerebellar atlas :footcite:p:`king2019functional`,
+the HCP thalamic atlas :footcite:p:`najdenovska2018vivo`,
+and the amygdala and hippocampus parcels from the HCP CIFTI subcortical parcellation
+:footcite:p:`glasser2013minimal`.
+The 4S atlas is used in the same manner across three PennLINC BIDS Apps:
+*XCP-D*, QSIPrep_, and ASLPrep_, to produce synchronized outputs across modalities.
+For more information about the 4S atlas, please see https://github.com/PennLINC/AtlasPack.
+
+.. tip::
+
+   You can choose to only use a subset of the available atlases by using the ``--atlases``
+   parameter.
+
+fsaverage-space atlases are written out to the ``atlases`` subfolder, following BEP038.
+fsnative-space atlases are written out to the subject directory.
+
+.. code-block::
+
+   <output_dir>/
+      atlases/
+         dataset_description.json
+         atlas-<label>/
+            atlas-<label>_hemi-<L|R>_space-fsaverage_dseg.annot
+            atlas-<label>_dseg.json
+            atlas-<label>_dseg.tsv
+      sub-<label>/[ses-<label>/]
+         anat/
+            sub-<label>[_ses-<label>]_hemi-<L|R>_space-fsnative_seg-<atlas>_dseg.annot
+            sub-<label>[_ses-<label>]_hemi-<L|R>_space-fsnative_seg-<atlas>_dseg.json
 
 
-ICA derivatives
-~~~~~~~~~~~~~~~
+*******************************
+Parcellated Structural Measures
+*******************************
 
-ICA outputs are stored in the ``func/`` subfolder::
-
-  sub-<label>/
-    func/
-      sub-<label>_space-MNI152NLin6Asym_res-2_desc-melodic_mixing.tsv
-      sub-<label>_space-MNI152NLin6Asym_res-2_desc-melodic_mixing.json
-      sub-<label>_space-MNI152NLin6Asym_res-2_desc-melodic_components.nii.gz
-      sub-<label>_space-MNI152NLin6Asym_res-2_desc-melodic_components.json
+*sMRIPost-LINC* outputs a set of parcellated structural measures.
 
 
-Functional derivatives
-~~~~~~~~~~~~~~~~~~~~~~
-
-Functional derivatives are stored in the ``func/`` subfolder.
-All derivatives contain ``task-<task_label>`` (mandatory) and ``run-<run_index>`` (optional), and
-these will be indicated with ``[specifiers]``::
-
-  sub-<label>/
-    func/
-      sub-<label>_[specifiers]_space-MNI152NLin6Asym_res-2_desc-aggrDenoised_bold.nii.gz
-      sub-<label>_[specifiers]_space-MNI152NLin6Asym_res-2_desc-nonaggrDenoised_bold.nii.gz
-      sub-<label>_[specifiers]_space-MNI152NLin6Asym_res-2_desc-orthaggrDenoised_bold.nii.gz
-
-**Regularly gridded outputs (images)**.
-Volumetric output spaces labels (``<label>`` above, and in the following) include
-``MNI152NLin6Asym`` (default).
-
-**Extracted confounding time series**.
-For each :abbr:`BOLD (blood-oxygen level dependent)` run processed with *sMRIPost-LINC*,
-an accompanying *confounds* file will be generated.
-Confounds_ are saved as a :abbr:`TSV (tab-separated value)` file::
-
-  sub-<label>/
-    func/
-      sub-<label>_[specifiers]_desc-aroma_metrics.tsv
-      sub-<label>_[specifiers]_desc-aroma_metrics.json
-      sub-<label>_[specifiers]_desc-aroma_timeseries.tsv
-      sub-<label>_[specifiers]_desc-aroma_timeseries.json
-
+*********
 Confounds
----------
+*********
 
-*sMRIPost-LINC* outputs a set of confounds that can be used to denoise the data.
-These are stored in a TSV file (``desc-aroma_timeseries.tsv``) and a JSON file
-(``desc-aroma_timeseries.json``) that contains metadata about the confounds.
-
-The confounds generated by *sMRIPost-LINC* are ICA component time series
-classified as "rejected" by ICA-AROMA.
-
-Columns starting with ``aroma_motion_`` are the raw noise ICA component time series.
-Columns starting with ``aroma_orth_motion_`` are the noise ICA component time series,
-after z-scoring and orthogonalization with respect to the signal ICA component time series.
-
-Confounds and "carpet"-plot on the visual reports
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-The visual reports provide several sections per task and run to aid designing
-a denoising strategy for subsequent analysis.
-Some of the estimated confounds are plotted with a "carpet" visualization of the
-:abbr:`BOLD (blood-oxygen level-dependent)` time series [Power2016]_.
-An example of these plots follows:
-
-See implementation on :mod:`~smripost_linc.workflows.bold.confounds.init_bold_confs_wf`.
+*sMRIPost-LINC* outputs a set of confounds that can be used to summarize data quality.
