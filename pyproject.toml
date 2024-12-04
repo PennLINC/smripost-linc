@@ -20,11 +20,11 @@ classifiers = [
 dependencies = [
   "neuromaps",
   "nipype >= 1.8.5",
-  "nireports @ git+https://github.com/pennlinc/nireports.git@main",
+  "nireports",
   "nitransforms == 24.1.0",
-  "niworkflows @ git+https://github.com/pennlinc/niworkflows.git@master",
+  "niworkflows",
   "pybids >= 0.15.6",
-  "smriprep @ git+https://github.com/pennlinc/smriprep.git@master",
+  "smriprep",
   "typer",
 ]
 dynamic = ["version"]

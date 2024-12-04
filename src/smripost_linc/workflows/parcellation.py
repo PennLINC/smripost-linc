@@ -2,7 +2,6 @@
 # vi: set ft=python sts=4 ts=4 sw=4 et:
 """Workflows for parcellating imaging data."""
 
-from neuromaps.transforms import fslr_to_fsaverage
 from nipype.interfaces import utility as niu
 from nipype.pipeline import engine as pe
 from niworkflows.engine.workflows import LiterateWorkflow as Workflow
@@ -11,7 +10,7 @@ from smripost_linc import config
 from smripost_linc.interfaces.bids import BIDSURI
 
 
-def init_load_atlases_wf(name='load_atlases_wf'):
+def init_load_atlases_wf(atlases, name='load_atlases_wf'):
     """Load atlases, warp them to fsnative, and convert them to annot files.
 
     1.  Identify the atlases to be used in the workflow.
@@ -51,18 +50,11 @@ def init_load_atlases_wf(name='load_atlases_wf'):
 
     from smripost_linc.interfaces.bids import DerivativesDataSink
     from smripost_linc.interfaces.misc import CiftiSeparateMetric
-    from smripost_linc.utils.bids import collect_atlases
     from smripost_linc.utils.boilerplate import describe_atlases
     from smripost_linc.utils.parcellation import convert_gifti_to_annot
 
     workflow = Workflow(name=name)
     output_dir = config.execution.output_dir
-
-    atlases = collect_atlases(
-        datasets=config.execution.datasets,
-        atlases=config.execution.atlases,
-        bids_filters=config.execution.bids_filters,
-    )
 
     # Reorganize the atlas file information
     atlas_names, atlas_files, atlas_labels_files, atlas_metadata = [], [], [], []
@@ -87,7 +79,6 @@ The following atlases were used in the workflow: {atlas_str}.
         niu.IdentityInterface(
             fields=[
                 'name_source',
-                'bold_file',
                 'atlas_names',
                 'atlas_datasets',
                 'atlas_files',
@@ -107,8 +98,8 @@ The following atlases were used in the workflow: {atlas_str}.
         niu.IdentityInterface(
             fields=[
                 'atlas_names',
-                'lh_atlas_annots',
-                'rh_atlas_annots',
+                'lh_fsaverage_annots',
+                'rh_fsaverage_annots',
                 'atlas_labels_files',
             ],
         ),
@@ -189,6 +180,9 @@ The following atlases were used in the workflow: {atlas_str}.
                 f'Unsupported format ({info["format"]}) and space ({info["space"]}) combination.'
             )
 
+        else:
+            raise NotImplementedError(f'Unsupported format ({info["format"]}).')
+
         for hemi in ['L', 'R']:
             annot_node = lh_annots if hemi == 'L' else rh_annots
 
@@ -197,7 +191,7 @@ The following atlases were used in the workflow: {atlas_str}.
                 # Warp atlas from fsLR to fsaverage
                 warp_fslr_to_fsaverage = pe.Node(
                     niu.Function(
-                        function=fslr_to_fsaverage,
+                        function=transforms.fslr_to_fsaverage,
                     ),
                     name=f'warp_fslr_to_fsaverage_{atlas}_{hemi}',
                 )
@@ -220,7 +214,7 @@ The following atlases were used in the workflow: {atlas_str}.
                     (gifti_to_annot, annot_node, [('out', f'in{i_atlas + 1}')]),
                 ])  # fmt:skip
 
-            elif info['format'] == 'gifti' and info['space'] == 'fsaverage':
+            elif info['space'] == 'fsaverage':
                 # Convert fsaverage to annot
                 gifti_to_annot = pe.Node(
                     niu.Function(
@@ -233,8 +227,8 @@ The following atlases were used in the workflow: {atlas_str}.
                     (gifti_to_annot, annot_node, [('out', f'in{i_atlas + 1}')]),
                 ])  # fmt:skip
 
-            elif info['space'] == 'fsnative' and info['format'] == 'annot':
-                raise Exception()
+            elif info['space'] == 'fsnative':
+                raise NotImplementedError('fsnative atlases are not yet supported.')
 
     atlas_srcs = pe.MapNode(
         BIDSURI(
@@ -249,24 +243,31 @@ The following atlases were used in the workflow: {atlas_str}.
     workflow.connect([(inputnode, atlas_srcs, [('atlas_files', 'in1')])])
 
     ds_atlas_lh = pe.MapNode(
-        DerivativesDataSink(),
+        DerivativesDataSink(
+            hemi='L',
+            space='fsaverage',
+            extension='.annot',
+        ),
         name='ds_atlas_lh',
         iterfield=['in_file', 'atlas', 'meta_dict', 'Sources'],
         run_without_submitting=True,
     )
     workflow.connect([
         (inputnode, ds_atlas_lh, [
-            ('name_source', 'name_source'),
             ('atlas_names', 'atlas'),
             ('atlas_metadata', 'meta_dict'),
         ]),
         (lh_annots, ds_atlas_lh, [('out', 'in_file')]),
         (atlas_srcs, ds_atlas_lh, [('out', 'Sources')]),
-        (ds_atlas_lh, outputnode, [('out_file', 'lh_atlas_annots')]),
+        (ds_atlas_lh, outputnode, [('out_file', 'lh_fsaverage_annots')]),
     ])  # fmt:skip
 
     ds_atlas_rh = pe.MapNode(
-        DerivativesDataSink(),
+        DerivativesDataSink(
+            hemi='R',
+            space='fsaverage',
+            extension='.annot',
+        ),
         name='ds_atlas_rh',
         iterfield=['in_file', 'atlas', 'meta_dict', 'Sources'],
         run_without_submitting=True,
@@ -279,7 +280,7 @@ The following atlases were used in the workflow: {atlas_str}.
         ]),
         (lh_annots, ds_atlas_rh, [('out', 'in_file')]),
         (atlas_srcs, ds_atlas_rh, [('out', 'Sources')]),
-        (ds_atlas_rh, outputnode, [('out_file', 'rh_atlas_annots')]),
+        (ds_atlas_rh, outputnode, [('out_file', 'rh_fsaverage_annots')]),
     ])  # fmt:skip
 
     copy_atlas_labels_file = pe.MapNode(
@@ -300,221 +301,147 @@ The following atlases were used in the workflow: {atlas_str}.
     return workflow
 
 
-def init_parcellate_fsaverage_wf(
-    mem_gb,
-    compute_mask=True,
-    name='parcellate_fsaverage_wf',
+def init_warp_atlases_to_fsnative_wf(
+    anat_file,
+    atlases,
+    name='warp_atlases_to_fsnative_wf',
 ):
-    """Parcellate stuff.
-
-    Part of the parcellation includes applying vertex-wise and node-wise masks.
-
-    Vertex-wise masks are typically calculated from the full BOLD run,
-    wherein any vertex that has a time series of all zeros or NaNs is excluded.
-    Additionally, if *any* volumes in a vertex's time series are NaNs,
-    that vertex will be excluded.
-
-    The node-wise mask is determined based on the vertex-wise mask and the workflow's
-    coverage threshold.
-    Any nodes in the atlas with less than the coverage threshold's % of vertices retained by the
-    vertex-wise mask will have that node's time series set to NaNs.
-
-    Workflow Graph
-        .. workflow::
-            :graph2use: orig
-            :simple_form: yes
-
-            from smripost_linc.tests.tests import mock_config
-            from smripost_linc import config
-            from smripost_linc.workflows.connectivity import init_parcellate_cifti_wf
-
-            with mock_config():
-                wf = init_parcellate_cifti_wf(mem_gb={'resampled': 2})
+    """Warp fsaverage atlases in annot format to fsnative space (still in annot format).
 
     Parameters
     ----------
-    mem_gb : :obj:`dict`
-        Dictionary of memory allocations.
-    compute_mask : :obj:`bool`
-        Whether to compute a vertex-wise mask for the CIFTI file.
-        When processing full BOLD runs, this should be True.
-        When processing truncated BOLD runs or scalar maps, this should be False,
-        and the vertex-wise mask should be provided via the inputnode..
-        Default is True.
-    name : :obj:`str`
+    anat_file : str
+        Path to the anatomical file.
+        Just used to set the source_file in the DerivativesDataSink.
+    atlases : list of str
+        List of atlas names.
+    name : str
         Workflow name.
-        Default is 'parcellate_cifti_wf'.
 
     Inputs
     ------
-    in_file
-        CIFTI file to parcellate.
-    atlas_files
-        List of CIFTI atlas files.
-    atlas_labels_files
-        List of TSV atlas labels files.
-    vertexwise_coverage
-        Vertex-wise coverage mask.
-        Only used if `compute_mask` is False.
-    coverage_cifti
-        Coverage CIFTI files. One for each atlas.
-        Only used if `compute_mask` is False.
+    freesurfer_dir
+        Path to the FreeSurfer directory.
+    lh_fsaverage_annots
+        List of left hemisphere fsaverage annot files.
+    rh_fsaverage_annots
+        List of right hemisphere fsaverage annot files.
+    atlas_metadata
+        Metadata for the atlases.
 
     Outputs
     -------
-    parcellated_cifti
-        Parcellated CIFTI files. One for each atlas.
-    parcellated_tsv
-        Parcellated TSV files. One for each atlas.
-    vertexwise_coverage
-        Vertex-wise coverage mask. Only output if `compute_mask` is True.
-    coverage_cifti
-        Coverage CIFTI files. One for each atlas. Only output if `compute_mask` is True.
-    coverage_tsv
-        Coverage TSV files. One for each atlas. Only output if `compute_mask` is True.
+    lh_fsnative_annots
+        List of left hemisphere fsnative annot files.
+    rh_fsnative_annots
+        List of right hemisphere fsnative annot files.
     """
-    from smripost_linc import config
-    from smripost_linc.interfaces.connectivity import CiftiMask, CiftiToTSV, CiftiVertexMask
-    from smripost_linc.interfaces.workbench import CiftiMath, CiftiParcellateWorkbench
+    from nipype.interfaces import freesurfer as fs
+
+    from smripost_linc.interfaces.bids import DerivativesDataSink
 
     workflow = Workflow(name=name)
+    output_dir = config.execution.output_dir
 
     inputnode = pe.Node(
         niu.IdentityInterface(
             fields=[
-                'in_file',
-                'atlas_files',
-                'atlas_labels_files',
-                'vertexwise_coverage',
-                'coverage_cifti',
+                'subject_id',
+                'freesurfer_dir',
+                'lh_fsaverage_annots',
+                'rh_fsaverage_annots',
+                'atlas_metadata',
             ],
         ),
         name='inputnode',
     )
-
     outputnode = pe.Node(
         niu.IdentityInterface(
             fields=[
-                'parcellated_cifti',
-                'parcellated_tsv',
-                'vertexwise_coverage',
-                'coverage_cifti',
-                'coverage_tsv',
+                'lh_fsnative_annots',
+                'rh_fsnative_annots',
             ],
         ),
         name='outputnode',
     )
 
-    # Replace vertices with all zeros with NaNs using Python.
-    coverage_buffer = pe.Node(
-        niu.IdentityInterface(fields=['vertexwise_coverage', 'coverage_cifti']),
-        name='coverage_buffer',
+    lh_fsnative_annots = pe.Node(
+        niu.Merge(len(atlases)),
+        name='lh_fsnative_annots',
     )
-    if compute_mask:
-        # Write out a vertex-wise binary coverage map using Python.
-        vertexwise_coverage = pe.Node(
-            CiftiVertexMask(),
-            name='vertexwise_coverage',
-        )
-        workflow.connect([
-            (inputnode, vertexwise_coverage, [('in_file', 'in_file')]),
-            (vertexwise_coverage, coverage_buffer, [('mask_file', 'vertexwise_coverage')]),
-            (vertexwise_coverage, outputnode, [('mask_file', 'vertexwise_coverage')]),
-        ])  # fmt:skip
+    rh_fsnative_annots = pe.Node(
+        niu.Merge(len(atlases)),
+        name='rh_fsnative_annots',
+    )
 
-        parcellate_coverage = pe.MapNode(
-            CiftiParcellateWorkbench(
-                direction='COLUMN',
-                only_numeric=True,
-                out_file='parcellated_atlas.pscalar.nii',
-                num_threads=config.nipype.omp_nthreads,
+    for hemi in ['L', 'R']:
+        annot_node = lh_fsnative_annots if hemi == 'L' else rh_fsnative_annots
+
+        hemistr = f'{hemi.lower()}h'
+        fsaverage_to_fsnative = pe.MapNode(
+            fs.SurfaceTransform(
+                hemi=hemistr,
+                source_subject='fsaverage',
             ),
-            name='parcellate_coverage',
-            iterfield=['atlas_label'],
-            n_procs=config.nipype.omp_nthreads,
+            name=f'fsaverage_to_fsnative_{hemistr}',
+            iterfield=['source_annot_file'],
         )
         workflow.connect([
-            (inputnode, parcellate_coverage, [('atlas_files', 'atlas_label')]),
-            (vertexwise_coverage, parcellate_coverage, [('mask_file', 'in_file')]),
-            (parcellate_coverage, coverage_buffer, [('out_file', 'coverage_cifti')]),
-            (parcellate_coverage, outputnode, [('out_file', 'coverage_cifti')]),
-        ])  # fmt:skip
-
-        coverage_to_tsv = pe.MapNode(
-            CiftiToTSV(),
-            name='coverage_to_tsv',
-            iterfield=['in_file', 'atlas_labels'],
-        )
-        workflow.connect([
-            (inputnode, coverage_to_tsv, [('atlas_labels_files', 'atlas_labels')]),
-            (parcellate_coverage, coverage_to_tsv, [('out_file', 'in_file')]),
-            (coverage_to_tsv, outputnode, [('out_file', 'coverage_tsv')]),
-        ])  # fmt:skip
-    else:
-        workflow.connect([
-            (inputnode, coverage_buffer, [
-                ('vertexwise_coverage', 'vertexwise_coverage'),
-                ('coverage_cifti', 'coverage_cifti'),
+            (inputnode, fsaverage_to_fsnative, [
+                (f'{hemistr}_fsaverage_annots', 'source_annot_file'),
+                ('freesurfer_dir', 'subjects_dir'),
+                ('subject_id', 'target_subject'),
             ]),
         ])  # fmt:skip
 
-    # Parcellate the data file using the vertex-wise coverage.
-    parcellate_data = pe.MapNode(
-        CiftiParcellateWorkbench(
-            direction='COLUMN',
-            only_numeric=True,
-            out_file=f'parcellated_data.{"ptseries" if compute_mask else "pscalar"}.nii',
-            num_threads=config.nipype.omp_nthreads,
-        ),
-        name='parcellate_data',
-        iterfield=['atlas_label'],
-        mem_gb=mem_gb['resampled'],
-        n_procs=config.nipype.omp_nthreads,
-    )
-    workflow.connect([
-        (inputnode, parcellate_data, [
-            ('in_file', 'in_file'),
-            ('atlas_files', 'atlas_label'),
-        ]),
-        (coverage_buffer, parcellate_data, [('vertexwise_coverage', 'cifti_weights')]),
-    ])  # fmt:skip
+        for i_atlas, atlas in enumerate(atlases):
+            select_fsaverage_annot = pe.Node(
+                niu.Select(index=i_atlas),
+                name=f'select_fsaverage_annot_{hemistr}_{atlas}',
+            )
+            select_fsnative_annot = pe.Node(
+                niu.Select(index=i_atlas),
+                name=f'select_fsnative_annot_{hemistr}_{atlas}',
+            )
+            workflow.connect([
+                (inputnode, select_fsaverage_annot, [(f'{hemistr}_fsaverage_annots', 'inlist')]),
+                (fsaverage_to_fsnative, select_fsnative_annot, [('out_file', 'inlist')]),
+            ])  # fmt:skip
 
-    # Threshold node coverage values based on coverage threshold.
-    threshold_coverage = pe.MapNode(
-        CiftiMath(
-            expression=f'data > {config.workflow.min_coverage}',
-            num_threads=config.nipype.omp_nthreads,
-        ),
-        name='threshold_coverage',
-        iterfield=['data'],
-        mem_gb=mem_gb['resampled'],
-        n_procs=config.nipype.omp_nthreads,
-    )
-    workflow.connect([(coverage_buffer, threshold_coverage, [('coverage_cifti', 'data')])])
+            atlas_src = pe.Node(
+                BIDSURI(
+                    numinputs=1,
+                    dataset_links=config.execution.dataset_links,
+                    out_dir=str(output_dir),
+                ),
+                name=f'atlas_src_{hemistr}_{atlas}',
+                run_without_submitting=True,
+            )
+            workflow.connect([(select_fsaverage_annot, atlas_src, [('out', 'in1')])])
 
-    # Mask out uncovered nodes from parcellated denoised data
-    mask_parcellated_data = pe.MapNode(
-        CiftiMask(),
-        name='mask_parcellated_data',
-        iterfield=['in_file', 'mask'],
-        mem_gb=mem_gb['resampled'],
-    )
-    workflow.connect([
-        (parcellate_data, mask_parcellated_data, [('out_file', 'in_file')]),
-        (threshold_coverage, mask_parcellated_data, [('out_file', 'mask')]),
-        (mask_parcellated_data, outputnode, [('out_file', 'parcellated_cifti')]),
-    ])  # fmt:skip
+            ds_fsnative_atlas = pe.Node(
+                DerivativesDataSink(
+                    source_file=anat_file,
+                    space='fsnative',
+                    segmentation=atlas,
+                    hemi=hemi,
+                    extension='.annot',
+                ),
+                name=f'ds_fsnative_atlas_{hemistr}_{atlas}',
+                iterfield=['in_file', 'meta_dict', 'Sources'],
+            )
+            workflow.connect([
+                (inputnode, ds_fsnative_atlas, [
+                    ('name_source', 'name_source'),
+                    ('atlas_metadata', 'meta_dict'),
+                ]),
+                (atlas_src, ds_fsnative_atlas, [('out', 'Sources')]),
+                (ds_fsnative_atlas, annot_node, [('out_file', f'in{i_atlas}')]),
+            ])  # fmt:skip
 
-    # Convert the parcellated CIFTI to a TSV file
-    cifti_to_tsv = pe.MapNode(
-        CiftiToTSV(),
-        name='cifti_to_tsv',
-        iterfield=['in_file', 'atlas_labels'],
-    )
     workflow.connect([
-        (inputnode, cifti_to_tsv, [('atlas_labels_files', 'atlas_labels')]),
-        (mask_parcellated_data, cifti_to_tsv, [('out_file', 'in_file')]),
-        (cifti_to_tsv, outputnode, [('out_file', 'parcellated_tsv')]),
+        (lh_fsnative_annots, outputnode, [('out', 'lh_fsnative_annots')]),
+        (rh_fsnative_annots, outputnode, [('out', 'rh_fsnative_annots')]),
     ])  # fmt:skip
 
     return workflow

@@ -63,6 +63,7 @@ def init_smripost_linc_wf():
     """
     from niworkflows.engine.workflows import LiterateWorkflow as Workflow
 
+    from smripost_linc.utils.bids import collect_atlases
     from smripost_linc.workflows.parcellation import init_load_atlases_wf
 
     ver = Version(config.environment.version)
@@ -70,10 +71,16 @@ def init_smripost_linc_wf():
     smripost_linc_wf = Workflow(name=f'smripost_linc_{ver.major}_{ver.minor}_wf')
     smripost_linc_wf.base_dir = config.execution.work_dir
 
-    load_atlases_wf = init_load_atlases_wf()
+    atlases = collect_atlases(
+        datasets=config.execution.datasets,
+        atlases=config.execution.atlases,
+        bids_filters=config.execution.bids_filters,
+    )
+
+    load_atlases_wf = init_load_atlases_wf(atlases=atlases)
 
     for subject_id in config.execution.participant_label:
-        single_subject_wf = init_single_subject_wf(subject_id)
+        single_subject_wf = init_single_subject_wf(subject_id, atlases=atlases)
 
         single_subject_wf.config['execution']['crashdump_dir'] = str(
             config.execution.output_dir / f'sub-{subject_id}' / 'log' / config.execution.run_uuid
@@ -84,8 +91,8 @@ def init_smripost_linc_wf():
         smripost_linc_wf.connect([
             (load_atlases_wf, single_subject_wf, [
                 ('outputnode.atlas_names', 'inputnode.atlas_names'),
-                ('outputnode.lh_atlas_annots', 'inputnode.lh_atlas_annots'),
-                ('outputnode.rh_atlas_annots', 'inputnode.rh_atlas_annots'),
+                ('outputnode.lh_fsaverage_annots', 'inputnode.lh_fsaverage_annots'),
+                ('outputnode.rh_fsaverage_annots', 'inputnode.rh_fsaverage_annots'),
                 ('outputnode.atlas_labels_files', 'inputnode.atlas_labels_files'),
             ]),
         ])  # fmt:skip
@@ -100,7 +107,7 @@ def init_smripost_linc_wf():
     return smripost_linc_wf
 
 
-def init_single_subject_wf(subject_id: str):
+def init_single_subject_wf(subject_id: str, atlases: list):
     """Organize the postprocessing pipeline for a single subject.
 
     It collects and reports information about the subject,
@@ -203,8 +210,8 @@ It is released under the [CC0]\
         niu.IdentityInterface(
             fields=[
                 'atlas_names',
-                'lh_atlas_annots',
-                'rh_atlas_annots',
+                'lh_fsaverage_annots',
+                'rh_fsaverage_annots',
                 'atlas_labels_files',
             ],
         ),
@@ -263,20 +270,19 @@ It is released under the [CC0]\
     workflow.connect([(about, ds_report_about, [('out_report', 'in_file')])])
 
     for anat_file in subject_data['anat']:
-        single_run_wf = init_single_run_wf(anat_file)
+        single_run_wf = init_single_run_wf(anat_file=anat_file, atlases=atlases)
         workflow.connect([
             (inputnode, single_run_wf, [
-                ('atlas_names', 'inputnode.atlas_names'),
-                ('lh_atlas_annots', 'inputnode.lh_atlas_annots'),
-                ('rh_atlas_annots', 'inputnode.rh_atlas_annots'),
-                ('atlas_labels_files', 'inputnode.atlas_labels_files'),
+                ('lh_fsaverage_annots', 'inputnode.lh_fsaverage_annots'),
+                ('rh_fsaverage_annots', 'inputnode.rh_fsaverage_annots'),
+                ('atlas_metadata', 'inputnode.atlas_metadata'),
             ]),
         ])  # fmt:skip
 
     return clean_datasinks(workflow)
 
 
-def init_single_run_wf(anat_file):
+def init_single_run_wf(anat_file, atlases):
     """Set up a single-run workflow for sMRIPost-LINC.
 
     This workflow organizes the postprocessing pipeline for a single
@@ -289,14 +295,14 @@ def init_single_run_wf(anat_file):
 
     from smripost_linc.utils.bids import collect_derivatives, extract_entities
     from smripost_linc.utils.freesurfer import find_fs_path
-    from smripost_linc.workflows.freesurfer import init_postprocess_freesurfer_wf
+    from smripost_linc.workflows.freesurfer import init_parcellate_external_wf
+    from smripost_linc.workflows.parcellation import init_warp_atlases_to_fsnative_wf
 
     spaces = config.workflow.spaces
 
     workflow = Workflow(name=_get_wf_name(anat_file, 'single_run'))
     workflow.__desc__ = ''
 
-    anat_metadata = config.execution.layout.get_metadata(anat_file)
     mem_gb = estimate_bold_mem_usage(anat_file)[1]
 
     entities = extract_entities(anat_file)
@@ -363,10 +369,9 @@ def init_single_run_wf(anat_file):
     inputnode = pe.Node(
         niu.IdentityInterface(
             fields=[
-                'atlas_names',
-                'lh_atlas_annots',
-                'rh_atlas_annots',
-                'atlas_labels_files',
+                'lh_fsaverage_annots',
+                'rh_fsaverage_annots',
+                'atlas_metadata',
             ],
         ),
         name='inputnode',
@@ -374,32 +379,42 @@ def init_single_run_wf(anat_file):
     )
 
     # Run single-run processing
-    postprocess_freesurfer_wf = init_postprocess_freesurfer_wf(
+    warp_atlases_to_fsnative_wf = init_warp_atlases_to_fsnative_wf(
         anat_file=anat_file,
-        freesurfer_dir=anat_fs_dir,
-        metadata=anat_metadata,
+        atlases=atlases,
         mem_gb=mem_gb,
     )
+    warp_atlases_to_fsnative_wf.inputs.inputnode.freesurfer_dir = anat_fs_dir
     workflow.connect([
-        (inputnode, postprocess_freesurfer_wf, [
-            ('atlas_names', 'inputnode.atlas_names'),
-            ('lh_atlas_annots', 'inputnode.lh_atlas_annots'),
-            ('rh_atlas_annots', 'inputnode.rh_atlas_annots'),
-            ('atlas_labels_files', 'inputnode.atlas_labels_files'),
+        (inputnode, warp_atlases_to_fsnative_wf, [
+            ('lh_fsaverage_annots', 'inputnode.lh_fsaverage_annots'),
+            ('rh_fsaverage_annots', 'inputnode.rh_fsaverage_annots'),
+            ('atlas_metadata', 'inputnode.atlas_metadata'),
+        ]),
+    ])  # fmt:skip
+
+    parcellate_external_wf = init_parcellate_external_wf(
+        atlases=atlases,
+        mem_gb={'resampled': 2},
+    )
+    parcellate_external_wf.inputs.inputnode.freesurfer_dir = anat_fs_dir
+    workflow.connect([
+        (warp_atlases_to_fsnative_wf, parcellate_external_wf, [
+            ('outputnode.lh_fsnative_annots', 'inputnode.lh_fsnative_annots'),
+            ('outputnode.rh_fsnative_annots', 'inputnode.rh_fsnative_annots'),
         ]),
     ])  # fmt:skip
 
     # Fill-in datasinks seen so far
     for node in workflow.list_node_names():
-        if node.split('.')[-1].startswith('ds_'):
+        node_name = node.split('.')[-1]
+        if node_name.startswith('ds_'):
             workflow.get_node(node).inputs.base_directory = config.execution.output_dir
-            workflow.get_node(node).inputs.source_file = anat_file
+
+            if not node_name.startswith('ds_atlas_'):
+                workflow.get_node(node).inputs.source_file = anat_file
 
     return workflow
-
-
-def _prefix(subid):
-    return subid if subid.startswith('sub-') else f'sub-{subid}'
 
 
 def clean_datasinks(workflow: pe.Workflow) -> pe.Workflow:
@@ -408,24 +423,3 @@ def clean_datasinks(workflow: pe.Workflow) -> pe.Workflow:
         if node.split('.')[-1].startswith('ds_'):
             workflow.get_node(node).interface.out_path_base = ''
     return workflow
-
-
-def get_nss(confounds_file):
-    """Get number of non-steady state volumes."""
-    import numpy as np
-    import pandas as pd
-
-    df = pd.read_table(confounds_file)
-
-    nss_cols = [c for c in df.columns if c.startswith('non_steady_state_outlier')]
-
-    dummy_scans = 0
-    if nss_cols:
-        initial_volumes_df = df[nss_cols]
-        dummy_scans = np.any(initial_volumes_df.to_numpy(), axis=1)
-        dummy_scans = np.where(dummy_scans)[0]
-
-        # reasonably assumes all NSS volumes are contiguous
-        dummy_scans = int(dummy_scans[-1] + 1)
-
-    return dummy_scans

@@ -1,8 +1,11 @@
 """Miscellaneous interfaces for fmriprep-aroma."""
 
+import numpy as np
 from nipype.interfaces.base import (
     CommandLineInputSpec,
+    DynamicTraitedSpec,
     File,
+    SimpleInterface,
     TraitedSpec,
     isdefined,
     traits,
@@ -151,3 +154,76 @@ class CiftiSeparateMetric(WBCommand):
     input_spec = _CiftiSeparateMetricInputSpec
     output_spec = _CiftiSeparateMetricOutputSpec
     _cmd = 'wb_command  -cifti-separate'
+
+
+class _ParcellationStats2TSVInputSpec(DynamicTraitedSpec):
+    in_file = File(exists=True, mandatory=True, desc='parcellated data')
+    hemisphere = traits.Enum('lh', 'rh', usedefault=True, desc='hemisphere')
+    atlas = traits.Str(mandatory=True, desc='atlas name')
+    out_file = File(
+        name_source=['in_file'],
+        name_template='parcellated_%s.tsv',
+        keep_extension=True,
+        desc='The TSV file',
+    )
+
+
+class _ParcellationStats2TSVOutputSpec(TraitedSpec):
+    out_file = File(exists=True, desc='TSV file with parcellated data')
+
+
+class ParcellationStats2TSV(SimpleInterface):
+    """Convert parcellated data to TSV."""
+
+    input_spec = _ParcellationStats2TSVInputSpec
+    output_spec = _ParcellationStats2TSVOutputSpec
+
+    def _sanity_check_columns(df, ref_col, red_col, atol=0):
+        if not np.allclose(
+            df[ref_col].astype(np.float32),
+            df[red_col].astype(np.float32),
+            atol=atol,
+        ):
+            raise Exception(f'The {ref_col} values were not identical to {red_col}')
+
+        df.drop(red_col, axis=1, inplace=True)
+        return df
+
+    def _run_interface(self, runtime):
+        import pandas as pd
+
+        redundant_columns = [
+            ('NumVert', 'NVertices_wgpct', 0),
+            ('SurfArea', 'Area_mm2_wgpct', 1),
+            ('NumVert', 'NVertices_piallgi', 0),
+            ('SurfArea', 'Area_mm2_piallgi', 1),
+        ]
+
+        with open(self.inputs.in_file) as f_obj:
+            data = f_obj.readlines()
+
+        idx = [i for i, line in enumerate(data) if line.startswith('# ColHeaders ')]
+        if len(idx) != 1:
+            raise ValueError(f'Could not find column headers in the file {self.inputs.in_file}')
+
+        idx = idx[0]
+
+        columns_row = data[idx]
+        actual_data = data[idx + 1 :]
+        actual_data = [line.split() for line in actual_data]
+        columns = columns_row.replace('# ColHeaders ', '').split()
+
+        df = pd.DataFrame(
+            columns=columns,
+            data=actual_data,
+        )
+        df.insert(0, 'hemisphere', self.inputs.hemisphere)
+        df.insert(0, 'atlas', self.inputs.atlas)
+
+        for ref_col, red_col, atol in redundant_columns:
+            if ref_col in df.columns and red_col in df.columns:
+                df = self._sanity_check_columns(df=df, ref_col=ref_col, red_col=red_col, atol=atol)
+
+        df.to_csv(self._results['out_file'], sep='\t', index=False)
+
+        return runtime

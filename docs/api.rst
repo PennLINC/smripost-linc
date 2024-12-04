@@ -35,4 +35,6 @@ Workflows
 ---------
 
 .. automodule:: smripost_linc.workflows.base
-.. automodule:: smripost_linc.workflows.aroma
+.. automodule:: smripost_linc.workflows.freesurfer
+.. automodule:: smripost_linc.workflows.parcellation
+.. automodule:: smripost_linc.workflows.outputs

@@ -1,5 +1,8 @@
 """Interfaces for working with FreeSurfer."""
 
+import os
+import shutil
+
 from nipype.interfaces.base import (
     Directory,
     DynamicTraitedSpec,
@@ -16,6 +19,12 @@ class _FreesurferFilesInputSpec(DynamicTraitedSpec):
         mandatory=True,
         desc="Directory containing anatomical file's FreeSurfer outputs",
     )
+    hemi = traits.Enum(
+        'lh',
+        'rh',
+        desc='Hemisphere to parcellate',
+        usedefault=True,
+    )
 
 
 class _FreesurferFilesOutputSpec(TraitedSpec):
@@ -27,6 +36,10 @@ class _FreesurferFilesOutputSpec(TraitedSpec):
         traits.Str,
         desc='Names of FreeSurfer files to parcellate',
     )
+    arguments = traits.List(
+        traits.Str,
+        desc='Arguments for mri_segstats',
+    )
 
 
 class FreesurferFiles(SimpleInterface):
@@ -36,37 +49,74 @@ class FreesurferFiles(SimpleInterface):
     output_spec = _FreesurferFilesOutputSpec
 
     def _run_interface(self, runtime):
-        ...
+        in_dir = self.inputs.freesurfer_dir
+        gwr = os.path.join(in_dir, 'surf', f'{self.inputs.hemi}.w-g.pct.mgh')
+        lgi = os.path.join(in_dir, 'surf', f'{self.inputs.hemi}.pial_lgi')
+        files = []
+        names = []
+        arguments = []
+        if os.path.exists(gwr):
+            files.append(gwr)
+            names.append('gwr')
+            arguments.append('--snr')
+
+        if os.path.exists(lgi):
+            files.append(lgi)
+            names.append('lgi')
+            arguments.append('')
+
+        self._results['files'] = files
+        self._results['names'] = names
 
         return runtime
 
 
-class _FreesurferAnnotsInputSpec(DynamicTraitedSpec):
+class _CopyAnnotsInputSpec(TraitedSpec):
     freesurfer_dir = Directory(
         exists=True,
         mandatory=True,
-        desc="Directory containing anatomical file's FreeSurfer outputs",
+        desc='FreeSurfer directory',
+    )
+    subject_id = traits.Str(
+        mandatory=True,
+        desc='FreeSurfer subject ID',
+    )
+    in_file = File(
+        exists=True,
+        mandatory=True,
+        desc='Input annotation file',
+    )
+    hemisphere = traits.Enum(
+        'lh',
+        'rh',
+        desc='Hemisphere to copy annotation file to',
+        usedefault=True,
+    )
+    atlas = traits.Str(
+        desc='Atlas to used in annotation file name',
     )
 
 
-class _FreesurferAnnotsOutputSpec(TraitedSpec):
-    files = traits.List(
-        File(exists=True),
-        desc='FreeSurfer files to parcellate',
-    )
-    names = traits.List(
-        traits.Str,
-        desc='Names of FreeSurfer files to parcellate',
+class _CopyAnnotsOutputSpec(TraitedSpec):
+    out_file = File(
+        exists=True,
+        desc='Output annotation file',
     )
 
 
-class FreesurferAnnots(SimpleInterface):
-    """Collect FreeSurfer annot files in fsaverage space."""
-
-    input_spec = _FreesurferAnnotsInputSpec
-    output_spec = _FreesurferAnnotsOutputSpec
+class CopyAnnots(SimpleInterface):
+    input_spec = _CopyAnnotsInputSpec
+    output_spec = _CopyAnnotsOutputSpec
 
     def _run_interface(self, runtime):
-        ...
+        out_file = os.path.join(
+            self.inputs.freesurfer_dir,
+            self.inputs.subject_id,
+            'label',
+            f'{self.inputs.hemisphere}.{self.inputs.atlas}.annot',
+        )
+        self._results['out_file'] = out_file
+
+        shutil.copyfile(self.inputs.in_file, out_file)
 
         return runtime
