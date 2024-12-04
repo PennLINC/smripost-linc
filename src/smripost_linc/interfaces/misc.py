@@ -160,10 +160,16 @@ class _ParcellationStats2TSVInputSpec(DynamicTraitedSpec):
     in_file = File(exists=True, mandatory=True, desc='parcellated data')
     hemisphere = traits.Enum('lh', 'rh', usedefault=True, desc='hemisphere')
     atlas = traits.Str(mandatory=True, desc='atlas name')
+    out_file = File(
+        name_source=['in_file'],
+        name_template='parcellated_%s.tsv',
+        keep_extension=True,
+        desc='The TSV file',
+    )
 
 
 class _ParcellationStats2TSVOutputSpec(TraitedSpec):
-    ...
+    out_file = File(exists=True, desc='TSV file with parcellated data')
 
 
 class ParcellationStats2TSV(SimpleInterface):
@@ -175,7 +181,8 @@ class ParcellationStats2TSV(SimpleInterface):
     def _sanity_check_columns(df, ref_col, red_col, atol=0):
         if not np.allclose(
             df[ref_col].astype(np.float32),
-            df[red_col].astype(np.float32), atol=atol,
+            df[red_col].astype(np.float32),
+            atol=atol,
         ):
             raise Exception(f'The {ref_col} values were not identical to {red_col}')
 
@@ -202,7 +209,7 @@ class ParcellationStats2TSV(SimpleInterface):
         idx = idx[0]
 
         columns_row = data[idx]
-        actual_data = data[idx + 1:]
+        actual_data = data[idx + 1 :]
         actual_data = [line.split() for line in actual_data]
         columns = columns_row.replace('# ColHeaders ', '').split()
 
