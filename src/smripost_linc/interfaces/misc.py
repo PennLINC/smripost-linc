@@ -199,8 +199,8 @@ class ParcellationStats2TSV(SimpleInterface):
             ('SurfArea', 'Area_mm2_piallgi', 1),
         ]
 
-        with open(self.inputs.in_file) as fo:
-            data = fo.readlines()
+        with open(self.inputs.in_file) as f_obj:
+            data = f_obj.readlines()
 
         idx = [i for i, line in enumerate(data) if line.startswith('# ColHeaders ')]
         if len(idx) != 1:
