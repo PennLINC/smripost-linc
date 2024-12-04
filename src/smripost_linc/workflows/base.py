@@ -407,9 +407,12 @@ def init_single_run_wf(anat_file, atlases):
 
     # Fill-in datasinks seen so far
     for node in workflow.list_node_names():
-        if node.split('.')[-1].startswith('ds_'):
+        node_name = node.split('.')[-1]
+        if node_name.startswith('ds_'):
             workflow.get_node(node).inputs.base_directory = config.execution.output_dir
-            workflow.get_node(node).inputs.source_file = anat_file
+
+            if not node_name.startswith('ds_atlas_'):
+                workflow.get_node(node).inputs.source_file = anat_file
 
     return workflow
 
