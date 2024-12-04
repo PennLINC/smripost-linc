@@ -44,6 +44,11 @@ def init_parcellate_external_wf(
     parcellated_tsvs
         Parcellated TSV files. One for each atlas and hemisphere.
     """
+    from nipype.interfaces.freesurfer import ParcellationStats
+
+    from smripost_linc.interfaces.freesurfer import FreesurferFiles, MRISegStats
+    from smripost_linc.interfaces.misc import ParcellationStats2TSV
+
     print(atlases)
     print(mem_gb)
 
@@ -70,13 +75,49 @@ def init_parcellate_external_wf(
     )
     workflow.add_nodes([inputnode, outputnode])
 
-    # Select Freesurfer files to parcellate
+    for hemi in ['lh', 'rh']:
+        # Select Freesurfer files to parcellate (GWR and LGI)
+        fs_files = pe.Node(FreesurferFiles(hemi=hemi), name=f'fs_files_{hemi}')
+        workflow.connect([(inputnode, fs_files, [('freesurfer_dir', 'freesurfer_dir')])])
 
-    # Parcellate each data file with each atlas in each hemisphere
+        # Parcellate each data file with each atlas in each hemisphere
+        for atlas in atlases:
+            mri_segstats = pe.MapNode(
+                MRISegStats(
+                    hemi=hemi,
+                    mem_gb=mem_gb,
+                ),
+                name=f'mri_segstats_{hemi}_{atlas}',
+                iterfield=['seg', 'slabel', 'arguments'],
+            )
+            workflow.connect([
+                (fs_files, mri_segstats, [
+                    ('files', 'in_file'),
+                    ('names', 'slabel'),
+                    ('arguments', 'arguments'),
+                ]),
+                (inputnode, mri_segstats, [(f'{hemi}_fsnative_annots', 'annot_file')]),
+            ])  # fmt:skip
 
-    # Convert parcellated data to TSV
+            # Now calculate standard surface stats
+            parcellation_stats = pe.Node(
+                ParcellationStats(subject_id='', hemisphere=hemi, th3=True, noglobal=True),
+                name=f'parcellation_stats_{hemi}_{atlas}',
+            )
+            workflow.connect([
+                (inputnode, parcellation_stats, [(f'{hemi}_fsnative_annots', 'in_annotation')]),
+            ])  # fmt:skip
 
-    # Write out parcellated data
-    ...
+            # Convert parcellated data to TSV
+            parcstats_to_tsv = pe.Node(
+                ParcellationStats2TSV(
+                    hemi=hemi,
+                    atlas=atlas,
+                ),
+                name=f'parcstats_to_tsv_{hemi}_{atlas}',
+            )
+
+            # Write out parcellated data
+            ...
 
     return workflow
