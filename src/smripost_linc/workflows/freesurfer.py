@@ -255,7 +255,7 @@ def init_convert_metrics_to_cifti_wf(name='convert_metrics_to_cifti_wf'):
         name='inputnode',
     )
 
-    # Convert FreeSurfer metrics to CIFTI
+    # Convert FreeSurfer metrics to CIFTIfy
     collect_fsaverage_surfaces = pe.Node(
         CollectFSAverageSurfaces(),
         name='collect_fsaverage_surfaces',
@@ -277,7 +277,9 @@ def init_convert_metrics_to_cifti_wf(name='convert_metrics_to_cifti_wf'):
             iterfield=['in_file'],
         )
         workflow.connect([
-            (collect_fsaverage_surfaces, convert_to_gifti, [('out_files', 'in_file')]),
+            (collect_fsaverage_surfaces, convert_to_gifti, [
+                (f'{hemi}_fsaverage_files', 'in_file'),
+            ]),
             (convert_to_gifti, convert_gifti_to_cifti, [('out_file', f'{hemi}_gifti')]),
         ])  # fmt:skip
 

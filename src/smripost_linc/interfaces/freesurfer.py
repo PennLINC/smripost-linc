@@ -2,6 +2,7 @@
 
 import os
 import shutil
+from glob import glob
 
 from nipype.interfaces.base import (
     Directory,
@@ -128,30 +129,20 @@ class _CollectFSAverageSurfacesInputSpec(TraitedSpec):
         mandatory=True,
         desc='FreeSurfer directory',
     )
-    subject_id = traits.Str(
-        mandatory=True,
-        desc='FreeSurfer subject ID',
-    )
-    in_file = File(
-        exists=True,
-        mandatory=True,
-        desc='Input annotation file',
-    )
-    hemisphere = traits.Enum(
-        'lh',
-        'rh',
-        desc='Hemisphere to copy annotation file to',
-        usedefault=True,
-    )
-    atlas = traits.Str(
-        desc='Atlas to used in annotation file name',
-    )
 
 
 class _CollectFSAverageSurfacesOutputSpec(TraitedSpec):
-    out_file = File(
-        exists=True,
-        desc='Output annotation file',
+    lh_fsaverage_files = traits.List(
+        File(exists=True),
+        desc='Left-hemisphere fsaverage-space surfaces',
+    )
+    rh_fsaverage_files = traits.List(
+        File(exists=True),
+        desc='Right-hemisphere fsaverage-space surfaces',
+    )
+    names = traits.List(
+        traits.Str,
+        desc='Names of collected surfaces',
     )
 
 
@@ -160,14 +151,18 @@ class CollectFSAverageSurfaces(SimpleInterface):
     output_spec = _CollectFSAverageSurfacesOutputSpec
 
     def _run_interface(self, runtime):
-        out_file = os.path.join(
+        in_dir = os.path.join(
             self.inputs.freesurfer_dir,
-            self.inputs.subject_id,
-            'label',
-            f'{self.inputs.hemisphere}.{self.inputs.atlas}.annot',
+            'surf',
         )
-        self._results['out_file'] = out_file
-
-        shutil.copyfile(self.inputs.in_file, out_file)
+        lh_mgh_files = sorted(glob(os.path.join(in_dir, 'lh.*.fsaverage.mgh')))
+        self._results['lh_fsaverage_files'] = lh_mgh_files
+        self._results['names'] = []
+        self._results['rh_fsaverage_files'] = []
+        for lh_file in lh_mgh_files:
+            name = os.path.basename(lh_file).split('.')[1]
+            self._results['names'].append(name)
+            rh_file = os.path.join(in_dir, f'rh.{name}.fsaverage.mgh')
+            self._results['rh_fsaverage_files'].append(rh_file)
 
         return runtime
