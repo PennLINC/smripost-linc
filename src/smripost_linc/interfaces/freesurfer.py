@@ -2,6 +2,7 @@
 
 import os
 import shutil
+from glob import glob
 
 from nipype.interfaces.base import (
     Directory,
@@ -118,5 +119,50 @@ class CopyAnnots(SimpleInterface):
         self._results['out_file'] = out_file
 
         shutil.copyfile(self.inputs.in_file, out_file)
+
+        return runtime
+
+
+class _CollectFSAverageSurfacesInputSpec(TraitedSpec):
+    freesurfer_dir = Directory(
+        exists=True,
+        mandatory=True,
+        desc='FreeSurfer directory',
+    )
+
+
+class _CollectFSAverageSurfacesOutputSpec(TraitedSpec):
+    lh_fsaverage_files = traits.List(
+        File(exists=True),
+        desc='Left-hemisphere fsaverage-space surfaces',
+    )
+    rh_fsaverage_files = traits.List(
+        File(exists=True),
+        desc='Right-hemisphere fsaverage-space surfaces',
+    )
+    names = traits.List(
+        traits.Str,
+        desc='Names of collected surfaces',
+    )
+
+
+class CollectFSAverageSurfaces(SimpleInterface):
+    input_spec = _CollectFSAverageSurfacesInputSpec
+    output_spec = _CollectFSAverageSurfacesOutputSpec
+
+    def _run_interface(self, runtime):
+        in_dir = os.path.join(
+            self.inputs.freesurfer_dir,
+            'surf',
+        )
+        lh_mgh_files = sorted(glob(os.path.join(in_dir, 'lh.*.fsaverage.mgh')))
+        self._results['lh_fsaverage_files'] = lh_mgh_files
+        self._results['names'] = []
+        self._results['rh_fsaverage_files'] = []
+        for lh_file in lh_mgh_files:
+            name = os.path.basename(lh_file).split('.')[1]
+            self._results['names'].append(name)
+            rh_file = os.path.join(in_dir, f'rh.{name}.fsaverage.mgh')
+            self._results['rh_fsaverage_files'].append(rh_file)
 
         return runtime

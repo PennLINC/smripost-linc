@@ -2,9 +2,12 @@
 # vi: set ft=python sts=4 ts=4 sw=4 et:
 """Workflows for working with FreeSurfer derivatives."""
 
+from nipype.interfaces import freesurfer as fs
 from nipype.interfaces import utility as niu
 from nipype.pipeline import engine as pe
 from niworkflows.engine.workflows import LiterateWorkflow as Workflow
+
+from smripost_linc.interfaces.bids import DerivativesDataSink
 
 
 def init_parcellate_external_wf(
@@ -45,9 +48,6 @@ def init_parcellate_external_wf(
     parcellated_tsvs
         Parcellated TSV files. One for each atlas and hemisphere.
     """
-    from nipype.interfaces import freesurfer as fs
-
-    from smripost_linc.interfaces.bids import DerivativesDataSink
     from smripost_linc.interfaces.freesurfer import CopyAnnots, FreesurferFiles
     from smripost_linc.interfaces.misc import ParcellationStats2TSV
 
@@ -236,3 +236,99 @@ def symlink_freesurfer_dir(freesurfer_dir, output_dir=None):
             )
 
     return str(output_dir)
+
+
+def init_convert_metrics_to_cifti_wf(name='convert_metrics_to_cifti_wf'):
+    """Convert FreeSurfer metrics from MGH format to CIFTI format in fsLR space."""
+    from smripost_linc.interfaces.freesurfer import CollectFSAverageSurfaces
+    from smripost_linc.interfaces.misc import CiftiCreateDenseScalar
+
+    workflow = Workflow(name=name)
+
+    inputnode = pe.Node(
+        niu.IdentityInterface(
+            fields=[
+                'subject_id',
+                'freesurfer_dir',
+            ],
+        ),
+        name='inputnode',
+    )
+
+    # Convert FreeSurfer metrics to CIFTIfy
+    collect_fsaverage_surfaces = pe.Node(
+        CollectFSAverageSurfaces(),
+        name='collect_fsaverage_surfaces',
+    )
+    workflow.connect([
+        (inputnode, collect_fsaverage_surfaces, [('freesurfer_dir', 'freesurfer_dir')]),
+    ])  # fmt:skip
+
+    convert_gifti_to_cifti = pe.MapNode(
+        CiftiCreateDenseScalar(),
+        name='convert_gifti_to_cifti',
+        iterfield=['lh_gifti', 'rh_gifti'],
+    )
+
+    for hemi in ['lh', 'rh']:
+        convert_to_gifti = pe.MapNode(
+            fs.MRIsConvert(out_datatype='gii'),
+            name=f'convert_to_gifti_{hemi}',
+            iterfield=['in_file'],
+        )
+        workflow.connect([
+            (collect_fsaverage_surfaces, convert_to_gifti, [
+                (f'{hemi}_fsaverage_files', 'in_file'),
+            ]),
+            (convert_to_gifti, convert_gifti_to_cifti, [('out_file', f'{hemi}_gifti')]),
+        ])  # fmt:skip
+
+        warp_fsaverage_to_fslr = pe.MapNode(
+            niu.Function(
+                input_names=['in_file', 'hemi'],
+                output_names=['out_file'],
+                function=fsaverage_to_fslr,
+            ),
+            name='warp_fsaverage_to_fslr',
+            iterfield=['in_file'],
+        )
+        warp_fsaverage_to_fslr.inputs.hemi = hemi
+        workflow.connect([
+            (convert_to_gifti, warp_fsaverage_to_fslr, [('out_file', 'in_file')]),
+            (warp_fsaverage_to_fslr, convert_gifti_to_cifti, [('out_file', f'{hemi}_gifti')]),
+        ])  # fmt:skip
+
+    ds_cifti = pe.MapNode(
+        DerivativesDataSink(
+            space='fsLR',
+            extension='.dscalar.nii',
+        ),
+        name='ds_cifti',
+        iterfield=['in_file', 'suffix'],
+    )
+    workflow.connect([
+        (collect_fsaverage_surfaces, ds_cifti, [('names', 'suffix')]),
+        (convert_gifti_to_cifti, ds_cifti, [('out_file', 'in_file')]),
+    ])  # fmt:skip
+
+    return workflow
+
+
+def fsaverage_to_fslr(in_file, hemi):
+    """Convert fsaverage-space GIFTI files to a CIFTI file in fsLR space."""
+    import os
+
+    from neuromaps import transforms
+
+    out_file = os.path.abspath('cifti.dscalar.nii')
+
+    fslr_gifti = transforms.fsaverage_to_fslr(
+        in_file,
+        target_density='164k',
+        hemi=hemi[0].upper(),
+        method='linear',
+    )
+    out_file = os.path.abspath(f'{hemi}.dscalar.nii')
+    fslr_gifti.to_filename(out_file)
+
+    return out_file
