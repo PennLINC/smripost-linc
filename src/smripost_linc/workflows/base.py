@@ -325,7 +325,7 @@ def init_single_run_wf(anat_file, atlases):
             f'{config.execution.fs_subjects_dir}.'
         )
 
-    # Then MCRIBS? Then Infant-FS?
+    # XXX: Then MCRIBS? Then Infant-FS?
 
     anatomical_cache = defaultdict(list, {})
     if config.execution.datasets:

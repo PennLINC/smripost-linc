@@ -62,7 +62,6 @@ def collect_derivatives(
     raw_dataset: Path | BIDSLayout | None,
     derivatives_dataset: Path | BIDSLayout | None,
     entities: dict | None,
-    fieldmap_id: str | None,
     spec: dict | None = None,
     patterns: list[str] | None = None,
     allow_multiple: bool = False,
@@ -70,7 +69,7 @@ def collect_derivatives(
 ) -> dict:
     """Gather existing derivatives and compose a cache.
 
-    TODO: Ingress 'spaces' and search for BOLD+mask in the spaces *or* xfms.
+    TODO: Ingress 'spaces' and search for images in the spaces *or* xfms to those spaces.
 
     Parameters
     ----------
@@ -80,8 +79,6 @@ def collect_derivatives(
         Path to the derivatives dataset or a BIDSLayout instance.
     entities : dict
         Dictionary of entities to use for filtering.
-    fieldmap_id : str | None
-        Fieldmap ID to use for filtering.
     spec : dict | None
         Specification dictionary.
     patterns : list[str] | None
@@ -155,9 +152,6 @@ def collect_derivatives(
                 # Combine entities with query. Query values override file entities.
                 query = {**entities, **q}
 
-            if k == 'boldref2fmap':
-                query['to'] = fieldmap_id
-
             item = layout.get(return_type='filename', **query)
             if not item:
                 derivs_cache[k] = None
@@ -171,6 +165,7 @@ def collect_derivatives(
                 derivs_cache[k] = item[0] if len(item) == 1 else item
 
     # Search for requested output spaces
+    # XXX: This is all BOLD-specific.
     if spaces is not None:
         # Put the output-space files/transforms in lists so they can be parallelized with
         # template_iterator_wf.

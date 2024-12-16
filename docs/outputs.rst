@@ -112,8 +112,8 @@ fsnative-space atlases are written out to the subject directory.
             atlas-<label>_dseg.tsv
       sub-<label>/[ses-<label>/]
          anat/
-            sub-<label>[_ses-<label>]_hemi-<L|R>_space-fsnative_seg-<atlas>_dseg.annot
-            sub-<label>[_ses-<label>]_hemi-<L|R>_space-fsnative_seg-<atlas>_dseg.json
+            <source_entities>_hemi-<L|R>_space-fsnative_seg-<atlas>_dseg.annot
+            <source_entities>_hemi-<L|R>_space-fsnative_seg-<atlas>_dseg.json
 
 
 *******************************
@@ -122,9 +122,25 @@ Parcellated Structural Measures
 
 *sMRIPost-LINC* outputs a set of parcellated structural measures.
 
+.. code-block::
+
+   <output_dir>/
+      sub-<label>/[ses-<label>/]
+         anat/
+            <source_entities>_space-fsnative_seg-<atlas>_stat-mean_desc-<measure>_morph.tsv
+            <source_entities>_space-fsnative_seg-<atlas>_stat-mean_desc-<measure>_morph.json
+
 
 *********
 Confounds
 *********
 
 *sMRIPost-LINC* outputs a set of confounds that can be used to summarize data quality.
+
+.. code-block::
+
+   <output_dir>/
+      sub-<label>/[ses-<label>/]
+         anat/
+            <source_entities>_qc.tsv
+            <source_entities>_qc.json
