@@ -246,12 +246,7 @@ def init_convert_metrics_to_cifti_wf(name='convert_metrics_to_cifti_wf'):
     workflow = Workflow(name=name)
 
     inputnode = pe.Node(
-        niu.IdentityInterface(
-            fields=[
-                'subject_id',
-                'freesurfer_dir',
-            ],
-        ),
+        niu.IdentityInterface(fields=['freesurfer_dir']),
         name='inputnode',
     )
 

@@ -295,7 +295,10 @@ def init_single_run_wf(anat_file, atlases):
 
     from smripost_linc.utils.bids import collect_derivatives, extract_entities
     from smripost_linc.utils.freesurfer import find_fs_path
-    from smripost_linc.workflows.freesurfer import init_parcellate_external_wf
+    from smripost_linc.workflows.freesurfer import (
+        init_convert_metrics_to_cifti_wf,
+        init_parcellate_external_wf,
+    )
     from smripost_linc.workflows.parcellation import init_warp_atlases_to_fsnative_wf
 
     spaces = config.workflow.spaces
@@ -405,7 +408,12 @@ def init_single_run_wf(anat_file, atlases):
         ]),
     ])  # fmt:skip
 
-    # Calculate myelin map if both T1w and T2w are available
+    # TODO: Calculate myelin map if both T1w and T2w are available
+
+    # Warp GIFTIs to fsLR CIFTIs
+    convert_metrics_to_cifti_wf = init_convert_metrics_to_cifti_wf()
+    convert_metrics_to_cifti_wf.inputs.inputnode.freesurfer_dir = anat_fs_dir
+    workflow.add_nodes([convert_metrics_to_cifti_wf])
 
     # Fill-in datasinks seen so far
     for node in workflow.list_node_names():
