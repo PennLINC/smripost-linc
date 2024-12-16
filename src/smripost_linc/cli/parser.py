@@ -559,7 +559,7 @@ def parse_args(args=None, namespace=None):
         )
 
     # Validate raw inputs if running in raw+derivatives mode
-    if datasets and not opts.skip_bids_validation:
+    if datasets and not opts.skip_bids_validation and False:
         from smripost_linc.utils.bids import validate_input_dir
 
         build_log.info(

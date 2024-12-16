@@ -12,6 +12,8 @@ from nipype.interfaces.base import (
     TraitedSpec,
     traits,
 )
+from nipype.interfaces.freesurfer import ParcellationStats as BaseParcellationStats
+from nipype.interfaces.freesurfer.utils import ParcellationStatsInputSpec
 
 
 class _FreesurferFilesInputSpec(DynamicTraitedSpec):
@@ -68,6 +70,8 @@ class FreesurferFiles(SimpleInterface):
 
         self._results['files'] = files
         self._results['names'] = names
+        self._results['arguments'] = arguments
+        raise Exception(self._results)
 
         return runtime
 
@@ -158,11 +162,26 @@ class CollectFSAverageSurfaces(SimpleInterface):
         lh_mgh_files = sorted(glob(os.path.join(in_dir, 'lh.*.fsaverage.mgh')))
         self._results['lh_fsaverage_files'] = lh_mgh_files
         self._results['names'] = []
-        self._results['rh_fsaverage_files'] = []
+        rh_mgh_files = []
         for lh_file in lh_mgh_files:
             name = os.path.basename(lh_file).split('.')[1]
             self._results['names'].append(name)
             rh_file = os.path.join(in_dir, f'rh.{name}.fsaverage.mgh')
-            self._results['rh_fsaverage_files'].append(rh_file)
+            rh_mgh_files.append(rh_file)
+
+        self._results['rh_fsaverage_files'] = rh_mgh_files
+        if not rh_mgh_files:
+            raise FileNotFoundError(f'No mgh files found in {in_dir}')
 
         return runtime
+
+
+class _ParcellationStatsInputSpec(ParcellationStatsInputSpec):
+    noglobal = traits.Bool(
+        argstr='--noglobal',
+        desc='Do not compute global stats',
+    )
+
+
+class ParcellationStats(BaseParcellationStats):
+    input_spec = _ParcellationStatsInputSpec

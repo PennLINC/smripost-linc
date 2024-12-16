@@ -8,6 +8,7 @@ from nipype.pipeline import engine as pe
 from niworkflows.engine.workflows import LiterateWorkflow as Workflow
 
 from smripost_linc.interfaces.bids import DerivativesDataSink
+from smripost_linc.interfaces.freesurfer import ParcellationStats
 
 
 def init_parcellate_external_wf(
@@ -137,7 +138,7 @@ def init_parcellate_external_wf(
                 name=f'segstats_to_tsv_{hemi}_{atlas}',
                 iterfield=['in_file'],
             )
-            workflow.connect([(mri_segstats, segstats_to_tsv, [('out_file', 'in_file')])])
+            workflow.connect([(mri_segstats, segstats_to_tsv, [('summary_file', 'in_file')])])
 
             # Write out parcellated data
             ds_segstats_tsv = pe.MapNode(
@@ -159,7 +160,7 @@ def init_parcellate_external_wf(
 
             # Now calculate standard surface stats
             parcellation_stats = pe.Node(
-                fs.ParcellationStats(subject_id='', hemisphere=hemi, th3=True, noglobal=True),
+                ParcellationStats(subject_id='', hemisphere=hemi, th3=True, noglobal=True),
                 name=f'parcellation_stats_{hemi}_{atlas}',
             )
             workflow.connect([
@@ -171,7 +172,7 @@ def init_parcellate_external_wf(
                 ParcellationStats2TSV(hemi=hemi, atlas=atlas),
                 name=f'parcstats_to_tsv_{hemi}_{atlas}',
             )
-            workflow.connect([(parcellation_stats, parcstats_to_tsv, [('out_file', 'in_file')])])
+            workflow.connect([(parcellation_stats, parcstats_to_tsv, [('out_table', 'in_file')])])
 
             # Write out parcellated data
             ds_parcstats_tsv = pe.Node(
@@ -187,7 +188,7 @@ def init_parcellate_external_wf(
                 name=f'ds_parcstats_tsv_{hemi}_{atlas}',
             )
             workflow.connect([
-                (fs_files, ds_parcstats_tsv, [('names', 'in_file')]),
+                (fs_files, ds_parcstats_tsv, [('names', 'desc')]),
                 (parcstats_to_tsv, ds_parcstats_tsv, [('out_file', 'in_file')]),
             ])  # fmt:skip
 
@@ -265,6 +266,12 @@ def init_convert_metrics_to_cifti_wf(name='convert_metrics_to_cifti_wf'):
         name='inputnode',
     )
 
+    # XXX: Need to run recon-all here to get some files into mgh
+    # # Get these into MGH
+    # if [ $HAS_LGI -gt 0 ]; then
+    #     ${singularity_cmd} recon-all -s ${subject_id} -qcache -measure pial_lgi
+    # fi
+
     # Convert FreeSurfer metrics to CIFTIfy
     collect_fsaverage_surfaces = pe.Node(
         CollectFSAverageSurfaces(),
@@ -290,7 +297,6 @@ def init_convert_metrics_to_cifti_wf(name='convert_metrics_to_cifti_wf'):
             (collect_fsaverage_surfaces, convert_to_gifti, [
                 (f'{hemi}_fsaverage_files', 'in_file'),
             ]),
-            (convert_to_gifti, convert_gifti_to_cifti, [('out_file', f'{hemi}_gifti')]),
         ])  # fmt:skip
 
         warp_fsaverage_to_fslr = pe.MapNode(
@@ -299,12 +305,12 @@ def init_convert_metrics_to_cifti_wf(name='convert_metrics_to_cifti_wf'):
                 output_names=['out_file'],
                 function=fsaverage_to_fslr,
             ),
-            name='warp_fsaverage_to_fslr',
+            name=f'warp_fsaverage_to_fslr_{hemi}',
             iterfield=['in_file'],
         )
         warp_fsaverage_to_fslr.inputs.hemi = hemi
         workflow.connect([
-            (convert_to_gifti, warp_fsaverage_to_fslr, [('out_file', 'in_file')]),
+            (convert_to_gifti, warp_fsaverage_to_fslr, [('converted', 'in_file')]),
             (warp_fsaverage_to_fslr, convert_gifti_to_cifti, [('out_file', f'{hemi}_gifti')]),
         ])  # fmt:skip
 

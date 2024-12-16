@@ -101,11 +101,17 @@ The following atlases were used in the workflow: {atlas_str}.
                 'lh_fsaverage_annots',
                 'rh_fsaverage_annots',
                 'atlas_labels_files',
+                'atlas_metadata',
             ],
         ),
         name='outputnode',
     )
-    workflow.connect([(inputnode, outputnode, [('atlas_names', 'atlas_names')])])
+    workflow.connect([
+        (inputnode, outputnode, [
+            ('atlas_names', 'atlas_names'),
+            ('atlas_metadata', 'atlas_metadata'),
+        ]),
+    ])  # fmt:skip
 
     lh_annots = pe.Node(
         niu.Merge(len(atlases)),
@@ -199,7 +205,7 @@ The following atlases were used in the workflow: {atlas_str}.
                 warp_fslr_to_fsaverage.inputs.hemi = hemi
                 warp_fslr_to_fsaverage.inputs.method = 'nearest'
                 workflow.connect([
-                    (gifti_buffer, warp_fslr_to_fsaverage, [(f'{hemi.lower()}_gifti', 'in_file')]),
+                    (gifti_buffer, warp_fslr_to_fsaverage, [(f'{hemi.lower()}h_gifti', 'in_file')]),
                 ])  # fmt:skip
 
                 # Convert fsaverage to annot
@@ -223,7 +229,7 @@ The following atlases were used in the workflow: {atlas_str}.
                     name=f'gifti_to_annot_{atlas}_{hemi}',
                 )
                 workflow.connect([
-                    (gifti_buffer, gifti_to_annot, [(f'{hemi.lower()}_gifti', 'in_file')]),
+                    (gifti_buffer, gifti_to_annot, [(f'{hemi.lower()}h_gifti', 'in_file')]),
                     (gifti_to_annot, annot_node, [('out', f'in{i_atlas + 1}')]),
                 ])  # fmt:skip
 
@@ -246,6 +252,7 @@ The following atlases were used in the workflow: {atlas_str}.
         DerivativesDataSink(
             hemi='L',
             space='fsaverage',
+            suffix='dseg',
             extension='.annot',
         ),
         name='ds_atlas_lh',
@@ -266,6 +273,7 @@ The following atlases were used in the workflow: {atlas_str}.
         DerivativesDataSink(
             hemi='R',
             space='fsaverage',
+            suffix='dseg',
             extension='.annot',
         ),
         name='ds_atlas_rh',
@@ -274,7 +282,7 @@ The following atlases were used in the workflow: {atlas_str}.
     )
     workflow.connect([
         (inputnode, ds_atlas_rh, [
-            ('name_source', 'name_source'),
+            ('name_source', 'source_file'),
             ('atlas_names', 'atlas'),
             ('atlas_metadata', 'meta_dict'),
         ]),
@@ -284,14 +292,14 @@ The following atlases were used in the workflow: {atlas_str}.
     ])  # fmt:skip
 
     copy_atlas_labels_file = pe.MapNode(
-        DerivativesDataSink(),
+        DerivativesDataSink(suffix='dseg', extension='.tsv'),
         name='copy_atlas_labels_file',
         iterfield=['in_file', 'atlas'],
         run_without_submitting=True,
     )
     workflow.connect([
         (inputnode, copy_atlas_labels_file, [
-            ('name_source', 'name_source'),
+            ('name_source', 'source_file'),
             ('atlas_names', 'atlas'),
             ('atlas_labels_files', 'in_file'),
         ]),
@@ -394,6 +402,7 @@ def init_warp_atlases_to_fsnative_wf(
             ]),
         ])  # fmt:skip
 
+        # Use a loop instead of MapNodes because DerivativesDataSink won't apply
         for i_atlas, atlas in enumerate(atlases):
             select_fsaverage_annot = pe.Node(
                 niu.Select(index=i_atlas),
@@ -403,8 +412,13 @@ def init_warp_atlases_to_fsnative_wf(
                 niu.Select(index=i_atlas),
                 name=f'select_fsnative_annot_{hemistr}_{atlas}',
             )
+            select_atlas_metadata = pe.Node(
+                niu.Select(index=i_atlas),
+                name=f'select_atlas_metadata_{hemistr}_{atlas}',
+            )
             workflow.connect([
                 (inputnode, select_fsaverage_annot, [(f'{hemistr}_fsaverage_annots', 'inlist')]),
+                (inputnode, select_atlas_metadata, [('atlas_metadata', 'inlist')]),
                 (fsaverage_to_fsnative, select_fsnative_annot, [('out_file', 'inlist')]),
             ])  # fmt:skip
 
@@ -431,10 +445,7 @@ def init_warp_atlases_to_fsnative_wf(
                 iterfield=['in_file', 'meta_dict', 'Sources'],
             )
             workflow.connect([
-                (inputnode, ds_fsnative_atlas, [
-                    ('name_source', 'name_source'),
-                    ('atlas_metadata', 'meta_dict'),
-                ]),
+                (select_atlas_metadata, ds_fsnative_atlas, [('out', 'meta_dict')]),
                 (atlas_src, ds_fsnative_atlas, [('out', 'Sources')]),
                 (ds_fsnative_atlas, annot_node, [('out_file', f'in{i_atlas}')]),
             ])  # fmt:skip

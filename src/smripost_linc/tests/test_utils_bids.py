@@ -25,7 +25,6 @@ def test_collect_derivatives_raw(base_ignore_list):
         raw_dataset=raw_layout,
         derivatives_dataset=None,
         entities={'subject': '01', 'task': 'mixedgamblestask'},
-        fieldmap_id=None,
         spec=None,
         patterns=None,
         allow_multiple=True,
@@ -43,7 +42,6 @@ def test_collect_derivatives_raw(base_ignore_list):
             raw_dataset=raw_layout,
             derivatives_dataset=None,
             entities={'subject': '01', 'task': 'mixedgamblestask'},
-            fieldmap_id=None,
             spec=None,
             patterns=None,
             allow_multiple=False,
@@ -70,7 +68,6 @@ def test_collect_derivatives_minimal(minimal_ignore_list):
         raw_dataset=None,
         derivatives_dataset=derivatives_layout,
         entities={'subject': '01', 'task': 'mixedgamblestask', 'run': 1},
-        fieldmap_id=None,
         spec=None,
         patterns=None,
     )
@@ -109,7 +106,6 @@ def test_collect_derivatives_full(full_ignore_list):
         raw_dataset=None,
         derivatives_dataset=derivatives_layout,
         entities={'subject': '01', 'task': 'mixedgamblestask', 'run': 1},
-        fieldmap_id=None,
         spec=None,
         patterns=None,
     )

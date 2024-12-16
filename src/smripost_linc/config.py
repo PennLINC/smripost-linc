@@ -520,7 +520,7 @@ class execution(_Config):
             'input': cls.bids_dir,
             'templateflow': Path(TF_LAYOUT.root),
         }
-        for deriv_name, deriv_path in cls.derivatives.items():
+        for deriv_name, deriv_path in cls.datasets.items():
             dataset_links[deriv_name] = deriv_path
         cls.dataset_links = dataset_links
 

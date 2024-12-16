@@ -42,10 +42,8 @@ from nipype.interfaces.base import (
 SUBJECT_TEMPLATE = """\
 \t<ul class="elem-desc">
 \t\t<li>Subject ID: {subject_id}</li>
-\t\t<li>Functional series: {n_bold:d}</li>
-{tasks}
-\t\t<li>Standard output spaces: {std_spaces}</li>
-\t\t<li>Non-standard output spaces: {nstd_spaces}</li>
+\t\t<li>Structural images: {n_t1s:d} T1-weighted {t2w}</li>
+\t\t<li>Standard spaces: {output_spaces}</li>
 \t</ul>
 """
 
@@ -93,56 +91,37 @@ class SummaryInterface(SimpleInterface):
 
 
 class SubjectSummaryInputSpec(BaseInterfaceInputSpec):
+    t1w = InputMultiObject(File(exists=True), desc='T1w structural images')
+    t2w = InputMultiObject(File(exists=True), desc='T2w structural images')
+    subjects_dir = Directory(desc='FreeSurfer subjects directory')
     subject_id = Str(desc='Subject ID')
-    bold = InputMultiObject(
-        traits.Either(File(exists=True), traits.List(File(exists=True))),
-        desc='BOLD functional series',
-    )
-    std_spaces = traits.List(Str, desc='list of standard spaces')
-    nstd_spaces = traits.List(Str, desc='list of non-standard spaces')
+    output_spaces = InputMultiObject(Str, desc='list of standard spaces')
 
 
 class SubjectSummary(SummaryInterface):
     input_spec = SubjectSummaryInputSpec
-    output_spec = SummaryOutputSpec
+
+    def _run_interface(self, runtime):
+        if isdefined(self.inputs.subject_id):
+            self._results['subject_id'] = self.inputs.subject_id
+        return super()._run_interface(runtime)
 
     def _generate_segment(self):
-        BIDS_NAME = re.compile(
-            r'^(.*\/)?'
-            '(?P<subject_id>sub-[a-zA-Z0-9]+)'
-            '(_(?P<session_id>ses-[a-zA-Z0-9]+))?'
-            '(_(?P<task_id>task-[a-zA-Z0-9]+))?'
-            '(_(?P<acq_id>acq-[a-zA-Z0-9]+))?'
-            '(_(?P<rec_id>rec-[a-zA-Z0-9]+))?'
-            '(_(?P<run_id>run-[a-zA-Z0-9]+))?'
-        )
+        t2w_seg = ''
+        if self.inputs.t2w:
+            t2w_seg = f'(+ {len(self.inputs.t2w):d} T2-weighted)'
 
-        # Add list of tasks with number of runs
-        bold_series = self.inputs.bold if isdefined(self.inputs.bold) else []
-        bold_series = [s[0] if isinstance(s, list) else s for s in bold_series]
-
-        counts = Counter(
-            BIDS_NAME.search(series).groupdict()['task_id'][5:] for series in bold_series
-        )
-
-        tasks = ''
-        if counts:
-            header = '\t\t<ul class="elem-desc">'
-            footer = '\t\t</ul>'
-            lines = [
-                '\t\t\t<li>Task: {task_id} ({n_runs:d} run{s})</li>'.format(
-                    task_id=task_id, n_runs=n_runs, s='' if n_runs == 1 else 's'
-                )
-                for task_id, n_runs in sorted(counts.items())
-            ]
-            tasks = '\n'.join([header] + lines + [footer])
+        output_spaces = self.inputs.output_spaces
+        if not isdefined(output_spaces):
+            output_spaces = '&lt;none given&gt;'
+        else:
+            output_spaces = ', '.join(output_spaces)
 
         return SUBJECT_TEMPLATE.format(
             subject_id=self.inputs.subject_id,
-            n_bold=len(bold_series),
-            tasks=tasks,
-            std_spaces=', '.join(self.inputs.std_spaces),
-            nstd_spaces=', '.join(self.inputs.nstd_spaces),
+            n_t1s=len(self.inputs.t1w),
+            t2w=t2w_seg,
+            output_spaces=output_spaces,
         )
 
 

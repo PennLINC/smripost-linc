@@ -94,6 +94,8 @@ def collect_derivatives(
         Dictionary with keys corresponding to the derivatives and values
         corresponding to the file paths.
     """
+    from json import loads
+
     if not entities:
         entities = {}
 
@@ -118,6 +120,14 @@ def collect_derivatives(
     if derivatives_dataset is not None:
         layout = derivatives_dataset
         if isinstance(layout, Path):
+            dataset_description = layout / 'dataset_description.json'
+            if not dataset_description.is_file():
+                raise FileNotFoundError(f'Dataset description not found: {dataset_description}')
+
+            desc = loads(dataset_description.read_text())
+            if desc.get('DatasetType') != 'derivative':
+                return derivs_cache
+
             layout = BIDSLayout(
                 layout,
                 config=config,
@@ -218,24 +228,6 @@ def collect_derivatives(
             raise ValueError(
                 f'Transforms to the following requested spaces not found: {missing_spaces}.'
             )
-
-    # Search for raw BOLD data
-    if not derivs_cache and raw_dataset is not None:
-        if isinstance(raw_dataset, Path):
-            raw_layout = BIDSLayout(raw_dataset, config=['bids'], validate=False)
-        else:
-            raw_layout = raw_dataset
-
-        for k, q in spec['raw'].items():
-            # Combine entities with query. Query values override file entities.
-            query = {**entities, **q}
-            item = raw_layout.get(return_type='filename', **query)
-            if not item:
-                derivs_cache[k] = None
-            elif not allow_multiple and len(item) > 1:
-                raise ValueError(f'Multiple files found for {k}: {item}')
-            else:
-                derivs_cache[k] = item[0] if len(item) == 1 else item
 
     return derivs_cache
 

@@ -78,6 +78,7 @@ def init_smripost_linc_wf():
     )
 
     load_atlases_wf = init_load_atlases_wf(atlases=atlases)
+    load_atlases_wf.inputs.inputnode.name_source = 'sub-01_T1w.nii.gz'
 
     for subject_id in config.execution.participant_label:
         single_subject_wf = init_single_subject_wf(subject_id, atlases=atlases)
@@ -91,6 +92,7 @@ def init_smripost_linc_wf():
         smripost_linc_wf.connect([
             (load_atlases_wf, single_subject_wf, [
                 ('outputnode.atlas_names', 'inputnode.atlas_names'),
+                ('outputnode.atlas_metadata', 'inputnode.atlas_metadata'),
                 ('outputnode.lh_fsaverage_annots', 'inputnode.lh_fsaverage_annots'),
                 ('outputnode.rh_fsaverage_annots', 'inputnode.rh_fsaverage_annots'),
                 ('outputnode.atlas_labels_files', 'inputnode.atlas_labels_files'),
@@ -182,9 +184,9 @@ It is released under the [CC0]\
     entities['subject'] = subject_id
 
     subject_data = collect_derivatives(
+        raw_dataset=None,
         derivatives_dataset=config.execution.layout,
         entities=entities,
-        fieldmap_id=None,
         allow_multiple=True,
         spaces=None,
     )
@@ -213,6 +215,7 @@ It is released under the [CC0]\
                 'lh_fsaverage_annots',
                 'rh_fsaverage_annots',
                 'atlas_labels_files',
+                'atlas_metadata',
             ],
         ),
         name='inputnode',
@@ -223,16 +226,17 @@ It is released under the [CC0]\
         BIDSInfo(
             bids_dir=config.execution.bids_dir,
             bids_validate=False,
-            in_file=subject_data['bold'][0],
+            in_file=subject_data['anat'][0],
         ),
         name='bids_info',
     )
 
     summary = pe.Node(
         SubjectSummary(
-            bold=subject_data['bold'],
-            std_spaces=spaces.get_spaces(nonstandard=False),
-            nstd_spaces=spaces.get_spaces(standard=False),
+            t1w=subject_data['t1w'],
+            t2w=subject_data['t2w'],
+            subjects_dir=config.execution.fs_subjects_dir,
+            output_spaces=spaces.get_spaces(nonstandard=False),
         ),
         name='summary',
         run_without_submitting=True,
@@ -247,7 +251,7 @@ It is released under the [CC0]\
 
     ds_report_summary = pe.Node(
         DerivativesDataSink(
-            source_file=subject_data['bold'][0],
+            source_file=subject_data['anat'][0],
             base_directory=config.execution.output_dir,
             desc='summary',
             datatype='figures',
@@ -259,7 +263,7 @@ It is released under the [CC0]\
 
     ds_report_about = pe.Node(
         DerivativesDataSink(
-            source_file=subject_data['bold'][0],
+            source_file=subject_data['anat'][0],
             base_directory=config.execution.output_dir,
             desc='about',
             datatype='figures',
@@ -288,7 +292,7 @@ def init_single_run_wf(anat_file, atlases):
     This workflow organizes the postprocessing pipeline for a single
     preprocessed anatomical image.
     """
-    from fmriprep.utils.misc import estimate_bold_mem_usage
+    # from fmriprep.utils.misc import estimate_bold_mem_usage
     from nipype.interfaces import utility as niu
     from nipype.pipeline import engine as pe
     from niworkflows.engine.workflows import LiterateWorkflow as Workflow
@@ -306,7 +310,7 @@ def init_single_run_wf(anat_file, atlases):
     workflow = Workflow(name=_get_wf_name(anat_file, 'single_run'))
     workflow.__desc__ = ''
 
-    mem_gb = estimate_bold_mem_usage(anat_file)[1]
+    # mem_gb = estimate_bold_mem_usage(anat_file)[1]
 
     entities = extract_entities(anat_file)
 
@@ -385,7 +389,6 @@ def init_single_run_wf(anat_file, atlases):
     warp_atlases_to_fsnative_wf = init_warp_atlases_to_fsnative_wf(
         anat_file=anat_file,
         atlases=atlases,
-        mem_gb=mem_gb,
     )
     warp_atlases_to_fsnative_wf.inputs.inputnode.freesurfer_dir = anat_fs_dir
     workflow.connect([
@@ -397,6 +400,7 @@ def init_single_run_wf(anat_file, atlases):
     ])  # fmt:skip
 
     parcellate_external_wf = init_parcellate_external_wf(
+        name_source=anat_file,
         atlases=atlases,
         mem_gb={'resampled': 2},
     )

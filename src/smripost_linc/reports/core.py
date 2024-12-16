@@ -98,7 +98,7 @@ def generate_reports(
         else:
             # XXX: Not sure what to do here since we just have anatomical data.
             # Beyond a threshold, we separate the anatomical report from the anatomical.
-            bootstrap_file = data.load('reports-spec-anat.yml')
+            bootstrap_file = data.load('reports-spec.yml')
             html_report = f'sub-{subject_label.lstrip("sub-")}_anat.html'
 
         report_error = run_reports(
@@ -129,7 +129,7 @@ def generate_reports(
             session_list = [ses[4:] if ses.startswith('ses-') else ses for ses in session_list]
 
             for session_label in session_list:
-                bootstrap_file = data.load('reports-spec-anat.yml')
+                bootstrap_file = data.load('reports-spec.yml')
                 html_report = f'sub-{subject_label.lstrip("sub-")}_ses-{session_label}_anat.html'
 
                 report_error = run_reports(
