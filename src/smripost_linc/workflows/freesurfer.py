@@ -239,7 +239,22 @@ def symlink_freesurfer_dir(freesurfer_dir, output_dir=None):
 
 
 def init_convert_metrics_to_cifti_wf(name='convert_metrics_to_cifti_wf'):
-    """Convert FreeSurfer metrics from MGH format to CIFTI format in fsLR space."""
+    """Convert FreeSurfer metrics from MGH format to CIFTI format in fsLR space.
+
+    This directly writes out the converted files, so it is mostly a standalone workflow.
+
+    Parameters
+    ----------
+    name : :obj:`str`
+        Workflow name.
+        Default is 'convert_metrics_to_cifti_wf'.
+
+    Inputs
+    ------
+    freesurfer_dir
+        Path to the structural file's FreeSurfer directory.
+
+    """
     from smripost_linc.interfaces.freesurfer import CollectFSAverageSurfaces
     from smripost_linc.interfaces.misc import CiftiCreateDenseScalar
 
