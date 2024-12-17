@@ -266,7 +266,58 @@ def init_convert_metrics_to_cifti_wf(name='convert_metrics_to_cifti_wf'):
         name='inputnode',
     )
 
+    # Calculate local gyrification index
+    # This may require MATLAB
+    calculate_lgi = pe.Node(
+        fs.ReconAll(directive='localGI'),
+        name='calculate_lgi',
+    )
+    workflow.connect([
+        (inputnode, calculate_lgi, [
+            ('freesurfer_dir', 'subjects_dir'),
+            ('subject_id', 'subject_id'),
+        ]),
+    ])  # fmt:skip
+
+    # Smooth scalar maps in the recon-all directory
+    qcache = pe.Node(
+        fs.ReconAll(directive='qcache'),
+        name='qcache',
+    )
+    workflow.connect([
+        (inputnode, qcache, [
+            ('freesurfer_dir', 'subjects_dir'),
+            ('subject_id', 'subject_id'),
+        ]),
+    ])  # fmt:skip
+
     # XXX: Need to run recon-all here to get some files into mgh
+    # # Run qcache on this person to get the mgh files (XXX: of what???)
+    # This step smooths all of the scalar maps in the recon-all directory
+    # (e.g., thickness, curvature). We just need to warp the smoothed version to fsLR CIFTIs.
+    # ${singularity_cmd} recon-all -s ${subject_id} -qcache
+    #
+    # # Run the lGI stuff on it. NOTE: this is not done with a container
+    # # because it requires matlab :(
+    # # CUBIC-specific stuff needed for LGI to be run outside of a container
+    # HAS_LGI=1
+    #
+    # set +e
+    # recon-all -s ${subject_id} -localGI
+    #
+    # # It may fail the first time, so try running it again:
+    # Failure = creates corrupted lgi file that needs to be deleted
+    # if [ $? -gt 0 ]; then
+    #     HAS_LGI=0
+    #     find ${subject_fs} -name '*pial_lgi' -delete
+    # fi
+    # set -e
+    #
+    # # create the .stats files for each annot file
+    # XXX: This is done in the parcellate_external_wf
+    # # Create the tsvs for the regional stats from the parcellations
+    # XXX: This is done in the parcellate_external_wf
+    #
     # # Get these into MGH
     # if [ $HAS_LGI -gt 0 ]; then
     #     ${singularity_cmd} recon-all -s ${subject_id} -qcache -measure pial_lgi
