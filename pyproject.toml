@@ -21,7 +21,7 @@ dependencies = [
   "neuromaps",
   "nipype >= 1.8.5",
   "nireports",
-  "nitransforms == 24.1.0",
+  "nitransforms == 24.1.1",
   "niworkflows",
   "pybids >= 0.15.6",
   "smriprep",
