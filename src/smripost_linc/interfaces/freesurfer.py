@@ -10,6 +10,7 @@ from nipype.interfaces.base import (
     File,
     SimpleInterface,
     TraitedSpec,
+    isdefined,
     traits,
 )
 from nipype.interfaces.freesurfer import ParcellationStats as BaseParcellationStats
@@ -185,3 +186,84 @@ class _ParcellationStatsInputSpec(ParcellationStatsInputSpec):
 
 class ParcellationStats(BaseParcellationStats):
     input_spec = _ParcellationStatsInputSpec
+
+
+class _SymlinkFreesurferOutputsInputSpec(TraitedSpec):
+    fs_subject_dir = Directory(
+        exists=True,
+        mandatory=True,
+        desc='FreeSurfer directory, including subject ID.',
+    )
+    output_dir = Directory(
+        exists=True,
+        mandatory=False,
+        desc='Output directory',
+    )
+
+
+class _SymlinkFreesurferOutputsOutputSpec(TraitedSpec):
+    freesurfer_dir = Directory(
+        exists=True,
+        desc='FreeSurfer directory',
+    )
+    subject_id = traits.Str(
+        desc='FreeSurfer subject ID',
+    )
+    subject_dir = Directory(
+        exists=True,
+        desc='FreeSurfer subject directory. Same as freesurfer_dir/subject_id',
+    )
+
+
+class SymlinkFreesurferOutputs(SimpleInterface):
+    input_spec = _SymlinkFreesurferOutputsInputSpec
+    output_spec = _SymlinkFreesurferOutputsOutputSpec
+
+    def _run_interface(self, runtime):
+        import os
+        from pathlib import Path
+
+        output_dir = self.inputs.output_dir
+        fs_subject_dir = self.inputs.fs_subject_dir
+
+        if not isdefined(output_dir):
+            output_dir = os.getcwd()
+
+        fs_subject_dir = Path(fs_subject_dir).resolve()
+        output_dir = Path(output_dir).resolve()
+
+        subject_id = fs_subject_dir.name
+        freesurfer_dir = fs_subject_dir.parent
+
+        if not output_dir.exists():
+            output_dir.mkdir(parents=True)
+
+        out_subject_dir = output_dir / subject_id
+
+        for root, _, files in os.walk(fs_subject_dir):
+            output_sub_dir = out_subject_dir / Path(root).relative_to(fs_subject_dir)
+            output_sub_dir.mkdir(exist_ok=True)
+
+            for file_ in files:
+                os.symlink(
+                    Path(root) / file_,
+                    output_sub_dir / file_,
+                )
+
+        # Now copy over fsaverage
+        fsaverage_dir = freesurfer_dir / 'fsaverage'
+        for root, _, files in os.walk(fsaverage_dir):
+            output_sub_dir = output_dir / Path(root).relative_to(freesurfer_dir)
+            output_sub_dir.mkdir(exist_ok=True)
+
+            for file_ in files:
+                os.symlink(
+                    Path(root) / file_,
+                    output_sub_dir / file_,
+                )
+
+        self._results['freesurfer_dir'] = str(output_dir)
+        self._results['subject_id'] = subject_id
+        self._results['subject_dir'] = str(out_subject_dir)
+
+        return runtime

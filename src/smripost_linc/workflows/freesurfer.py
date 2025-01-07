@@ -69,17 +69,6 @@ def init_parcellate_external_wf(
         name='inputnode',
     )
 
-    # TODO: Ensure fsaverage is copied over as well.
-    copy_freesurfer_files = pe.Node(
-        niu.Function(
-            input_names=['freesurfer_dir', 'output_dir'],
-            output_names=['output_dir', 'subject_id'],
-            function=symlink_freesurfer_dir,
-        ),
-        name='copy_freesurfer_files',
-    )
-    workflow.connect([(inputnode, copy_freesurfer_files, [('freesurfer_dir', 'freesurfer_dir')])])
-
     for hemi in ['lh', 'rh']:
         # Select Freesurfer files to parcellate (GWR and LGI)
         fs_files = pe.Node(FreesurferFiles(hemi=hemi), name=f'fs_files_{hemi}')
@@ -95,9 +84,7 @@ def init_parcellate_external_wf(
             (inputnode, copy_annots, [
                 (f'{hemi}_fsnative_annots', 'in_file'),
                 ('atlases', 'atlas'),
-            ]),
-            (copy_freesurfer_files, copy_annots, [
-                ('output_dir', 'freesurfer_dir'),
+                ('freesurfer_dir', 'freesurfer_dir'),
                 ('subject_id', 'subject_id'),
             ]),
         ])  # fmt:skip
@@ -110,9 +97,7 @@ def init_parcellate_external_wf(
             )
             prepare_segstats_arg.inputs.in2 = hemi
             prepare_segstats_arg.inputs.in3 = atlas
-            workflow.connect([
-                (copy_freesurfer_files, prepare_segstats_arg, [('subject_id', 'in1')]),
-            ])  # fmt:skip
+            workflow.connect([(inputnode, prepare_segstats_arg, [('subject_id', 'in1')])])
 
             mri_segstats = pe.MapNode(
                 fs.SegStats(),
@@ -120,12 +105,12 @@ def init_parcellate_external_wf(
                 iterfield=['in_file', 'slabel', 'args'],
             )
             workflow.connect([
+                (inputnode, mri_segstats, [('freesurfer_dir', 'subjects_dir')]),
                 (fs_files, mri_segstats, [
                     ('files', 'in_file'),
                     ('names', 'slabel'),
                     ('arguments', 'args'),
                 ]),
-                (copy_freesurfer_files, mri_segstats, [('output_dir', 'subjects_dir')]),
                 (prepare_segstats_arg, mri_segstats, [('out', 'annot')]),
             ])  # fmt:skip
 
@@ -193,50 +178,6 @@ def init_parcellate_external_wf(
             ])  # fmt:skip
 
     return workflow
-
-
-def symlink_freesurfer_dir(freesurfer_dir, output_dir=None):
-    """Symlink the FreeSurfer directory to the output directory.
-
-    Folders will be created in the output directory if they do not exist,
-    while files will be symlinked.
-
-    Parameters
-    ----------
-    freesurfer_dir : str
-        Path to the FreeSurfer directory.
-    output_dir : str or None
-        Path to the output directory. If None, the current working directory
-        will be used.
-
-    Returns
-    -------
-    str
-        Path to the output directory.
-    """
-    import os
-    from pathlib import Path
-
-    if output_dir is None:
-        output_dir = os.getcwd()
-
-    freesurfer_dir = Path(freesurfer_dir).resolve()
-    output_dir = Path(output_dir).resolve()
-
-    if not output_dir.exists():
-        output_dir.mkdir(parents=True)
-
-    for root, _, files in os.walk(freesurfer_dir):
-        output_sub_dir = output_dir / Path(root).relative_to(freesurfer_dir)
-        output_sub_dir.mkdir(exist_ok=True)
-
-        for file_ in files:
-            os.symlink(
-                Path(root) / file_,
-                output_sub_dir / file_,
-            )
-
-    return str(output_dir)
 
 
 def init_convert_metrics_to_cifti_wf(name='convert_metrics_to_cifti_wf'):

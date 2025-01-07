@@ -297,6 +297,7 @@ def init_single_run_wf(anat_file, atlases):
     from nipype.pipeline import engine as pe
     from niworkflows.engine.workflows import LiterateWorkflow as Workflow
 
+    from smripost_linc.interfaces.freesurfer import SymlinkFreesurferOutputs
     from smripost_linc.utils.bids import collect_derivatives, extract_entities
     from smripost_linc.utils.freesurfer import find_fs_path
     from smripost_linc.workflows.freesurfer import (
@@ -385,17 +386,29 @@ def init_single_run_wf(anat_file, atlases):
         run_without_submitting=True,
     )
 
+    # Create symlinked copy of Freesurfer directory in working directory
+    # TODO: Ensure fsaverage is copied over as well.
+    copy_freesurfer_files = pe.Node(
+        SymlinkFreesurferOutputs(
+            freesurfer_dir=anat_fs_dir,
+            output_dir=None,
+        ),
+        name='copy_freesurfer_files',
+    )
+
     # Run single-run processing
     warp_atlases_to_fsnative_wf = init_warp_atlases_to_fsnative_wf(
         anat_file=anat_file,
         atlases=atlases,
     )
-    warp_atlases_to_fsnative_wf.inputs.inputnode.freesurfer_dir = anat_fs_dir
     workflow.connect([
         (inputnode, warp_atlases_to_fsnative_wf, [
             ('lh_fsaverage_annots', 'inputnode.lh_fsaverage_annots'),
             ('rh_fsaverage_annots', 'inputnode.rh_fsaverage_annots'),
             ('atlas_metadata', 'inputnode.atlas_metadata'),
+        ]),
+        (copy_freesurfer_files, warp_atlases_to_fsnative_wf, [
+            ('freesurfer_dir', 'inputnode.freesurfer_dir'),
         ]),
     ])  # fmt:skip
 
@@ -404,8 +417,11 @@ def init_single_run_wf(anat_file, atlases):
         atlases=atlases,
         mem_gb={'resampled': 2},
     )
-    parcellate_external_wf.inputs.inputnode.freesurfer_dir = anat_fs_dir
     workflow.connect([
+        (copy_freesurfer_files, parcellate_external_wf, [
+            ('subject_id', 'inputnode.subject_id'),
+            ('freesurfer_dir', 'inputnode.freesurfer_dir'),
+        ]),
         (warp_atlases_to_fsnative_wf, parcellate_external_wf, [
             ('outputnode.lh_fsnative_annots', 'inputnode.lh_fsnative_annots'),
             ('outputnode.rh_fsnative_annots', 'inputnode.rh_fsnative_annots'),
@@ -416,8 +432,11 @@ def init_single_run_wf(anat_file, atlases):
 
     # Warp GIFTIs to fsLR CIFTIs
     convert_metrics_to_cifti_wf = init_convert_metrics_to_cifti_wf()
-    convert_metrics_to_cifti_wf.inputs.inputnode.freesurfer_dir = anat_fs_dir
-    workflow.add_nodes([convert_metrics_to_cifti_wf])
+    workflow.connect([
+        (copy_freesurfer_files, convert_metrics_to_cifti_wf, [
+            ('freesurfer_dir', 'inputnode.freesurfer_dir'),
+        ]),
+    ])  # fmt:skip
 
     # Fill-in datasinks seen so far
     for node in workflow.list_node_names():
