@@ -145,11 +145,14 @@ def init_parcellate_external_wf(
 
             # Now calculate standard surface stats
             parcellation_stats = pe.Node(
-                ParcellationStats(subject_id='', hemisphere=hemi, th3=True, noglobal=True),
+                ParcellationStats(hemisphere=hemi, th3=True, noglobal=True),
                 name=f'parcellation_stats_{hemi}_{atlas}',
             )
             workflow.connect([
-                (inputnode, parcellation_stats, [(f'{hemi}_fsnative_annots', 'in_annotation')]),
+                (inputnode, parcellation_stats, [
+                    ('subject_id', 'subject_id'),
+                    (f'{hemi}_fsnative_annots', 'in_annotation'),
+                ]),
             ])  # fmt:skip
 
             # Convert parcellated data to TSV
@@ -195,7 +198,8 @@ def init_convert_metrics_to_cifti_wf(name='convert_metrics_to_cifti_wf'):
     ------
     freesurfer_dir
         Path to the structural file's FreeSurfer directory.
-
+    subject_id
+        FreeSurfer subject ID.
     """
     from smripost_linc.interfaces.freesurfer import CollectFSAverageSurfaces
     from smripost_linc.interfaces.misc import CiftiCreateDenseScalar
@@ -203,7 +207,12 @@ def init_convert_metrics_to_cifti_wf(name='convert_metrics_to_cifti_wf'):
     workflow = Workflow(name=name)
 
     inputnode = pe.Node(
-        niu.IdentityInterface(fields=['freesurfer_dir']),
+        niu.IdentityInterface(
+            fields=[
+                'freesurfer_dir',
+                'subject_id',
+            ],
+        ),
         name='inputnode',
     )
 

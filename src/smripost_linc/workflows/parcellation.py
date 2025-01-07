@@ -205,7 +205,9 @@ The following atlases were used in the workflow: {atlas_str}.
                 warp_fslr_to_fsaverage.inputs.hemi = hemi
                 warp_fslr_to_fsaverage.inputs.method = 'nearest'
                 workflow.connect([
-                    (gifti_buffer, warp_fslr_to_fsaverage, [(f'{hemi.lower()}h_gifti', 'in_file')]),
+                    (gifti_buffer, warp_fslr_to_fsaverage, [
+                        (f'{hemi.lower()}h_gifti', 'in_file'),
+                    ]),
                 ])  # fmt:skip
 
                 # Convert fsaverage to annot

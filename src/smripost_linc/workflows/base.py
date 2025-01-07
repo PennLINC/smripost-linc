@@ -387,11 +387,9 @@ def init_single_run_wf(anat_file, atlases):
     )
 
     # Create symlinked copy of Freesurfer directory in working directory
-    # TODO: Ensure fsaverage is copied over as well.
     copy_freesurfer_files = pe.Node(
         SymlinkFreesurferOutputs(
             freesurfer_dir=anat_fs_dir,
-            output_dir=None,
         ),
         name='copy_freesurfer_files',
     )
@@ -408,6 +406,7 @@ def init_single_run_wf(anat_file, atlases):
             ('atlas_metadata', 'inputnode.atlas_metadata'),
         ]),
         (copy_freesurfer_files, warp_atlases_to_fsnative_wf, [
+            ('subject_id', 'inputnode.subject_id'),
             ('freesurfer_dir', 'inputnode.freesurfer_dir'),
         ]),
     ])  # fmt:skip
@@ -434,6 +433,7 @@ def init_single_run_wf(anat_file, atlases):
     convert_metrics_to_cifti_wf = init_convert_metrics_to_cifti_wf()
     workflow.connect([
         (copy_freesurfer_files, convert_metrics_to_cifti_wf, [
+            ('subject_id', 'inputnode.subject_id'),
             ('freesurfer_dir', 'inputnode.freesurfer_dir'),
         ]),
     ])  # fmt:skip
